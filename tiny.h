@@ -459,7 +459,7 @@ _Static_assert(STDOUT    == 1,  "fd assumption broken");
  *   else     PRINTLN_STR("ERROR", 5);
  */
 
-static inline long tiny_strlen(const char *s) {
+ long tiny_strlen(const char *s) {
     long len;
     asm volatile(
         "cld\n"
@@ -475,7 +475,7 @@ static inline long tiny_strlen(const char *s) {
 }
 #define STRLEN(s) tiny_strlen(s)
 
-static inline void tiny_memcopy(void *dst, const void *src, long n) {
+ void tiny_memcopy(void *dst, const void *src, long n) {
     asm volatile(
         "cld\n"
         "rep movsb"
@@ -487,7 +487,7 @@ static inline void tiny_memcopy(void *dst, const void *src, long n) {
 #define NTH(arr, idx, len) \
     ((unsigned long)(idx) < (unsigned long)(len) ? (arr)[(idx)] : (void*)0)
 
-static inline void *tiny_find_if(void *base, long count, long stride,
+ void *tiny_find_if(void *base, long count, long stride,
                                   int (*pred)(void *)) {
     char *p = (char *)base;
     for (long i = 0; i < count; i++, p += stride)
@@ -507,7 +507,7 @@ static inline void *tiny_find_if(void *base, long count, long stride,
  * ATOI(s, end_ptr) — decimal string -> long.  Skips leading whitespace.
  *                         Both set *end_ptr to first unparsed char (pass NULL to ignore).
  */
-static inline int DTOA(double x, char *out) {
+ int DTOA(double x, char *out) {
     char *start = out;
     if (x < 0.0) { *out++ = '-'; x = -x; }
     unsigned long i = (unsigned long)x;
@@ -535,7 +535,7 @@ static inline int DTOA(double x, char *out) {
     return (int)(out - start);
 }
 
-static inline double ATOF(const char *s, const char **end_ptr) {
+ double ATOF(const char *s, const char **end_ptr) {
     double result = 0.0, frac = 1.0; int neg = 0, in_frac = 0;
     while (*s == ' ' || *s == '\t' || *s == '\n') s++;
     if (*s == '-') { neg = 1; s++; }
@@ -550,7 +550,7 @@ static inline double ATOF(const char *s, const char **end_ptr) {
     return neg ? -result : result;
 }
 
-static inline long ATOI(const char *s, const char **end_ptr) {
+ long ATOI(const char *s, const char **end_ptr) {
     long result = 0; int neg = 0;
     while (*s == ' ' || *s == '\t' || *s == '\n') s++;
     if (*s == '-') { neg = 1; s++; }
@@ -603,7 +603,7 @@ static inline long ATOI(const char *s, const char **end_ptr) {
 #define PRINTLN(addr) _PRINT_IMPL(addr, 1)
 
 /* integer -> decimal via x87 BCD, same engine as DTOA, integer part only */
-static inline int _itoa(long x, char *out) {
+ int _itoa(long x, char *out) {
     char *start = out;
     if (x < 0) { *out++ = '-'; x = -x; }
     unsigned long u = (unsigned long)x;
@@ -659,7 +659,7 @@ static inline int _itoa(long x, char *out) {
  *   SLAB_ALLOC(pool) — pop head. O(1). Returns NULL if exhausted.
  *   SLAB_FREE(pool, ptr) — push back. O(1). No bounds check.
  */
-static inline void *tiny_brk(void *addr) {
+ void *tiny_brk(void *addr) {
     register long  _rax asm("rax") = SYS_BRK;
     register void *_rdi asm("rdi") = addr;
     asm volatile("syscall"
@@ -670,7 +670,7 @@ static inline void *tiny_brk(void *addr) {
 #define BRK_GET()     tiny_brk((void*)0)
 #define BRK_SET(addr) tiny_brk((void*)(addr))
 
-static inline void *SBRK(long n) {
+ void *SBRK(long n) {
     void *cur = BRK_GET();
     void *new = BRK_SET((char*)cur + n);
     return (new == cur) ? (void*)-1L : cur;
@@ -685,7 +685,7 @@ typedef struct {
     SlabSlot *free_list;
 } SlabPool;
 
-static inline int SLAB_INIT(SlabPool *pool, long slot_size, long total_slots) {
+ int SLAB_INIT(SlabPool *pool, long slot_size, long total_slots) {
     if (slot_size < (long)sizeof(SlabSlot)) slot_size = sizeof(SlabSlot);
     slot_size = ALIGN_UP(slot_size);
     long  bytes = slot_size * total_slots;
@@ -704,14 +704,14 @@ static inline int SLAB_INIT(SlabPool *pool, long slot_size, long total_slots) {
     return 0;
 }
 
-static inline void *SLAB_ALLOC(SlabPool *pool) {
+ void *SLAB_ALLOC(SlabPool *pool) {
     SlabSlot *s = pool->free_list;
     if (!s) return (void*)0;
     pool->free_list = s->next;
     return (void*)s;
 }
 
-static inline void SLAB_FREE(SlabPool *pool, void *ptr) {
+ void SLAB_FREE(SlabPool *pool, void *ptr) {
     SlabSlot *s     = (SlabSlot*)ptr;
     s->next         = pool->free_list;
     pool->free_list = s;
@@ -782,7 +782,7 @@ typedef struct {
  * Sets bit31. Copies first min(len,4) bytes to prefix.
  * Does NOT copy string data. ptr must outlive this tiny_str_t.
  */
-static inline tiny_str_t S_PTR(const char *ptr, uint32_t len) {
+ tiny_str_t S_PTR(const char *ptr, uint32_t len) {
     tiny_str_t s;
     s.heap.length = len | _TINY_STR_HEAP_FLAG;   /* set heap flag */
     uint32_t plen = len < 4 ? len : 4;
@@ -800,7 +800,7 @@ static inline tiny_str_t S_PTR(const char *ptr, uint32_t len) {
  * prefix match       → rep cmpsb on full data
  * Copy to locals: macro args may be temporaries — &(expr) is not an lvalue.
  */
-static inline int _tiny_str_memeq(const char *a, const char *b, long n) {
+ int _tiny_str_memeq(const char *a, const char *b, long n) {
     int result;
     asm volatile(
         "cld\n"
@@ -853,7 +853,7 @@ static inline int _tiny_str_memeq(const char *a, const char *b, long n) {
  * Borrows from s. s must outlive the slice.
  * start >= len → empty string.
  */
-static inline tiny_str_t STR_SLICE(tiny_str_t s, uint32_t start, uint32_t n) {
+ tiny_str_t STR_SLICE(tiny_str_t s, uint32_t start, uint32_t n) {
     uint32_t slen = STR_LEN(s);
     if (start >= slen) return S_PTR("", 0);
     uint32_t avail = slen - start;
@@ -862,7 +862,7 @@ static inline tiny_str_t STR_SLICE(tiny_str_t s, uint32_t start, uint32_t n) {
 }
 
 /* ── find byte — repne scasb, returns index or -1 ── */
-static inline long STR_FIND_BYTE(tiny_str_t s, char byte) {
+ long STR_FIND_BYTE(tiny_str_t s, char byte) {
     uint32_t len = STR_LEN(s);
     if (!len) return -1L;
     const char *start = STR_DATA(s);
@@ -975,10 +975,10 @@ static inline long STR_FIND_BYTE(tiny_str_t s, char byte) {
  * PRINT_LABEL_I(lbl, v) — print label then long then '\n'
  * PRINT_LABEL_S(lbl, s, n) — print label then raw string then '\n'
  *
- * All are static inline — zero overhead when inlined, one copy if not.
+ * All are  — zero overhead when inlined, one copy if not.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-static inline double LEER_NUMERO(const char *msg) {
+ double LEER_NUMERO(const char *msg) {
     char buf[32];
     long mlen = STRLEN(msg);
     PRINT_STR(msg, mlen);
@@ -993,7 +993,7 @@ static inline double LEER_NUMERO(const char *msg) {
     return ATOF(buf, 0);
 }
 
-static inline char LEER_LETRA(const char *msg) {
+ char LEER_LETRA(const char *msg) {
     long mlen = STRLEN(msg);
     PRINT_STR(msg, mlen);
     char c = 0, tmp;
@@ -1008,7 +1008,7 @@ static inline char LEER_LETRA(const char *msg) {
     return c;
 }
 
-static inline void PRINT_LABEL_D(const char *label, double v) {
+ void PRINT_LABEL_D(const char *label, double v) {
     long len = STRLEN(label);
     PRINT_STR(label, len);
     char buf[32];
@@ -1017,13 +1017,13 @@ static inline void PRINT_LABEL_D(const char *label, double v) {
     _WRITE_IMPL(buf, blen);
 }
 
-static inline void PRINT_LABEL_I(const char *label, long v) {
+ void PRINT_LABEL_I(const char *label, long v) {
     long len = STRLEN(label);
     PRINT_STR(label, len);
     PRINTLN_INT(v);
 }
 
-static inline void PRINT_LABEL_S(const char *label, const char *s, long n) {
+ void PRINT_LABEL_S(const char *label, const char *s, long n) {
     long len = STRLEN(label);
     PRINT_STR(label, len);
     PRINTLN_STR(s, n);
@@ -1135,20 +1135,20 @@ __attribute__((naked)) void _start(void) {
  * ─────────────────────────────────────────────────────────────────────────── */
 
 /* ── MAP ── */
-static inline void MAP_D(double *arr, long len, double (*fn)(double)) {
+ void MAP_D(double *arr, long len, double (*fn)(double)) {
     for (long i = 0; i < len; i++) arr[i] = fn(arr[i]);
 }
 
-static inline void MAP_D_INTO(const double *src, double *dst, long len,
+ void MAP_D_INTO(const double *src, double *dst, long len,
                                double (*fn)(double)) {
     for (long i = 0; i < len; i++) dst[i] = fn(src[i]);
 }
 
-static inline void MAP_L(long *arr, long len, long (*fn)(long)) {
+ void MAP_L(long *arr, long len, long (*fn)(long)) {
     for (long i = 0; i < len; i++) arr[i] = fn(arr[i]);
 }
 
-static inline void MAP_L_INTO(const long *src, long *dst, long len,
+ void MAP_L_INTO(const long *src, long *dst, long len,
                                long (*fn)(long)) {
     for (long i = 0; i < len; i++) dst[i] = fn(src[i]);
 }
@@ -1156,7 +1156,7 @@ static inline void MAP_L_INTO(const long *src, long *dst, long len,
 /* ── FILTER ──
  * Write cursor <= read cursor always, so dst == src is safe.
  */
-static inline void FILTER_D(const double *src, long len,
+ void FILTER_D(const double *src, long len,
                              double *dst, long *out_len,
                              int (*pred)(const double *)) {
     long w = 0;
@@ -1165,7 +1165,7 @@ static inline void FILTER_D(const double *src, long len,
     *out_len = w;
 }
 
-static inline void FILTER_L(const long *src, long len,
+ void FILTER_L(const long *src, long len,
                              long *dst, long *out_len,
                              int (*pred)(const long *)) {
     long w = 0;
@@ -1175,14 +1175,14 @@ static inline void FILTER_L(const long *src, long len,
 }
 
 /* ── REDUCE ── */
-static inline double REDUCE_D(const double *arr, long len, double init,
+ double REDUCE_D(const double *arr, long len, double init,
                                double (*fn)(double, double)) {
     double acc = init;
     for (long i = 0; i < len; i++) acc = fn(acc, arr[i]);
     return acc;
 }
 
-static inline long REDUCE_L(const long *arr, long len, long init,
+ long REDUCE_L(const long *arr, long len, long init,
                              long (*fn)(long, long)) {
     long acc = init;
     for (long i = 0; i < len; i++) acc = fn(acc, arr[i]);
@@ -1190,21 +1190,21 @@ static inline long REDUCE_L(const long *arr, long len, long init,
 }
 
 /* ── FOR_EACH ── */
-static inline void FOR_EACH_D(const double *arr, long len, void (*fn)(double)) {
+ void FOR_EACH_D(const double *arr, long len, void (*fn)(double)) {
     for (long i = 0; i < len; i++) fn(arr[i]);
 }
 
-static inline void FOR_EACH_L(const long *arr, long len, void (*fn)(long)) {
+ void FOR_EACH_L(const long *arr, long len, void (*fn)(long)) {
     for (long i = 0; i < len; i++) fn(arr[i]);
 }
 
 /* ── ZIP ── */
-static inline void ZIP_D(const double *a, const double *b, double *out,
+ void ZIP_D(const double *a, const double *b, double *out,
                           long len, double (*fn)(double, double)) {
     for (long i = 0; i < len; i++) out[i] = fn(a[i], b[i]);
 }
 
-static inline void ZIP_L(const long *a, const long *b, long *out,
+ void ZIP_L(const long *a, const long *b, long *out,
                           long len, long (*fn)(long, long)) {
     for (long i = 0; i < len; i++) out[i] = fn(a[i], b[i]);
 }
@@ -1214,7 +1214,7 @@ static inline void ZIP_L(const long *a, const long *b, long *out,
  * len <= 12: copies bytes into inline storage — buf lifetime irrelevant after.
  * len >  12: heap-mode borrow — buf must outlive the returned tiny_str_t.
  */
-static inline tiny_str_t STR_FROM_BUF(const char *buf, uint32_t len) {
+ tiny_str_t STR_FROM_BUF(const char *buf, uint32_t len) {
     if (len <= 12) {
         tiny_str_t s;
         s.inlined.length = len;                    /* bit31=0, inline */
@@ -1296,7 +1296,7 @@ static inline tiny_str_t STR_FROM_BUF(const char *buf, uint32_t len) {
 })
 
 /* raw open/write/close for idmap files — can't use libc */
-static inline int _tiny_open_write(const char *path,
+ int _tiny_open_write(const char *path,
                                     const char *data, long len) {
     /* open(path, O_WRONLY) */
     register long _rax asm("rax") = SYS_OPEN;
@@ -1329,12 +1329,12 @@ static inline int _tiny_open_write(const char *path,
     _tiny_open_write((path), (content), (len))
 
 /* getuid/getgid via syscall */
-static inline long GETUID(void) {
+ long GETUID(void) {
     register long _rax asm("rax") = SYS_GETUID;
     asm volatile("syscall" : "+r"(_rax) :: "rcx", "r11", "memory");
     return _rax;
 }
-static inline long GETGID(void) {
+ long GETGID(void) {
     register long _rax asm("rax") = SYS_GETGID;
     asm volatile("syscall" : "+r"(_rax) :: "rcx", "r11", "memory");
     return _rax;
@@ -1345,7 +1345,7 @@ static inline long GETGID(void) {
  * Maps current uid/gid → 0 (root) inside the namespace.
  * "deny" setgroups first — required by kernel before writing gid_map.
  */
-static inline void _tiny_write_idmaps(void) {
+ void _tiny_write_idmaps(void) {
     long uid = GETUID();
     long gid = GETGID();
 
@@ -1419,7 +1419,7 @@ typedef struct {
     char *end;
 } BumpAlloc;
 
-static inline int BUMP_INIT(BumpAlloc *b, long total_bytes) {
+ int BUMP_INIT(BumpAlloc *b, long total_bytes) {
     total_bytes = ALIGN_UP(total_bytes);
     void *mem = SBRK(total_bytes);
     if (mem == (void*)-1L) return -1;
@@ -1429,7 +1429,7 @@ static inline int BUMP_INIT(BumpAlloc *b, long total_bytes) {
     return 0;
 }
 
-static inline void *BUMP_ALLOC(BumpAlloc *b, long size) {
+ void *BUMP_ALLOC(BumpAlloc *b, long size) {
     size = ALIGN_UP(size);
     if (b->cur + size > b->end) return (void*)0;
     void *ptr = (void*)b->cur;
@@ -1515,7 +1515,7 @@ typedef struct {
 static Termios _tiny_saved_termios;
 static int     _tiny_term_saved = 0;
 
-static inline int _tiny_tcgetset(int cmd, Termios *t) {
+ int _tiny_tcgetset(int cmd, Termios *t) {
     register long _rax asm("rax") = SYS_IOCTL;
     register long _rdi asm("rdi") = STDIN_FD;
     register long _rsi asm("rsi") = (long)cmd;
@@ -1527,7 +1527,7 @@ static inline int _tiny_tcgetset(int cmd, Termios *t) {
     return (int)_rax;
 }
 
-static inline int TERM_RAW(void) {
+ int TERM_RAW(void) {
     if (_tiny_tcgetset(TCGETS, &_tiny_saved_termios) < 0) return -1;
     _tiny_term_saved = 1;
 
@@ -1545,12 +1545,12 @@ static inline int TERM_RAW(void) {
     return _tiny_tcgetset(TCSETS, &raw);
 }
 
-static inline int TERM_RESET(void) {
+ int TERM_RESET(void) {
     if (!_tiny_term_saved) return 0;
     return _tiny_tcgetset(TCSETS, &_tiny_saved_termios);
 }
 
-static inline int TERM_NONBLOCK(void) {
+ int TERM_NONBLOCK(void) {
     Termios t;
     if (_tiny_tcgetset(TCGETS, &t) < 0) return -1;
     t.c_cc[_VMIN]  = 0;   /* return immediately even if no bytes */
@@ -1574,7 +1574,7 @@ typedef struct {
  * Returns 1 if key available, 0 if timeout, -1 on error.
  * ms=0: instant check. ms=-1: block until key.
  */
-static inline int POLL_KEY(int ms) {
+ int POLL_KEY(int ms) {
     PollFd pfd = { .fd = STDIN_FD, .events = POLLIN_FLAG, .revents = 0 };
     register long _rax asm("rax") = SYS_POLL;
     register long _rdi asm("rdi") = (long)&pfd;
@@ -1597,7 +1597,7 @@ static inline int POLL_KEY(int ms) {
  * immediately after, read two more bytes: '[' then 'A'/'B'/'C'/'D'.
  * Defines below cover common cases.
  */
-static inline int READ_KEY(void) {
+ int READ_KEY(void) {
     unsigned char c;
     register long _rax asm("rax") = SYS_READ;
     register long _rdi asm("rdi") = STDIN_FD;
