@@ -204,9 +204,11 @@ _Static_assert(STDOUT    == 1,  "fd assumption broken");
     static const long long _absmask = 0x7FFFFFFFFFFFFFFFLL;                   \
     asm volatile(                                                              \
         "movsd  (%1),   %%xmm0\n"                                              \
-        "andpd  (%2),   %%xmm0\n"                                              \
+        "movq   (%2),   %%rax\n"                                               \
+        "movd   %%rax,   %%xmm1\n"                                              \
+        "andpd  %%xmm1,  %%xmm0\n"                                              \
         "movsd  %%xmm0, (%0)"                                                  \
-        :: "r"(out), "r"(a), "r"(&_absmask) : "xmm0", "memory");              \
+        :: "r"(out), "r"(a), "r"(&_absmask) : "xmm0", "xmm1", "rax", "memory"); \
 })
 
 /* NEG: flip IEEE 754 sign bit via xorpd with 0x8000000000000000 mask */
@@ -214,9 +216,11 @@ _Static_assert(STDOUT    == 1,  "fd assumption broken");
     static const long long _negmask = (long long)0x8000000000000000LL;        \
     asm volatile(                                                              \
         "movsd  (%1),   %%xmm0\n"                                              \
-        "xorpd  (%2),   %%xmm0\n"                                              \
+        "movq   (%2),   %%rax\n"                                               \
+        "movd   %%rax,   %%xmm1\n"                                              \
+        "xorpd  %%xmm1,  %%xmm0\n"                                             \
         "movsd  %%xmm0, (%0)"                                                  \
-        :: "r"(out), "r"(a), "r"(&_negmask) : "xmm0", "memory");              \
+        :: "r"(out), "r"(a), "r"(&_negmask) : "xmm0", "xmm1", "rax", "memory"); \
 })
 
 #define MIN(out, a, b) ({                                                      \
@@ -384,6 +388,7 @@ _Static_assert(STDOUT    == 1,  "fd assumption broken");
 #define IAVG(x,y)         ({ unsigned long _x=(x),_y=(y); (_x&_y)+((_x^_y)>>1); })
 #define IS_POW2(x)        ({ unsigned long _x=(x); (_x && !(_x&(_x-1))); })
 #define IS_OPP_SIGN(x,y)  (((long)(x)^(long)(y)) < 0)
+#define SIGN(v)           ({ long _v=(long)(v); (_v>0)-(_v<0); })
 #define MERGE(a,b,mask)   ((a)^(((a)^(b))&(mask)))
 #define BIT_SET(x,n)      ((x) |=  (1UL<<(n)))
 #define BIT_CLR(x,n)      ((x) &= ~(1UL<<(n)))
@@ -483,6 +488,16 @@ _Static_assert(STDOUT    == 1,  "fd assumption broken");
         :: "memory");
 }
 #define MEM_COPY(dst, src, n) tiny_memcopy((dst), (src), (n))
+
+ void tiny_memzero(void *dst, long n) {
+    asm volatile(
+        "cld\n"
+        "xor %%al, %%al\n"
+        "rep stosb"
+        : "+D"(dst), "+c"(n)
+        :: "rax", "memory");
+}
+#define MEM_ZERO(dst, n) tiny_memzero((dst), (n))
 
 #define NTH(arr, idx, len) \
     ((unsigned long)(idx) < (unsigned long)(len) ? (arr)[(idx)] : (void*)0)

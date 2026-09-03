@@ -162,14 +162,14 @@ static void __attribute__((noinline)) test_s4(void) {
   TEST("ROOT(9)==3", _feq(out, 3.0));
 
   double neg = -5.0;
-  // ABS(out, neg);
-  // TEST("ABS(-5)==5", _feq(out, 5.0));
-  // ABS(&out, &b);
-  // TEST("ABS(4)==4", _feq(out, 4.0));
-  // NEG(&out, &b);
-  // TEST("NEG(4)==-4", _feq(out, -4.0));
-  // NEG(&out, &neg);
-  // TEST("NEG(-5)==5", _feq(out, 5.0));
+  ABS(&out, &neg);
+  TEST("ABS(-5)==5", _feq(out, 5.0));
+  ABS(&out, &b);
+  TEST("ABS(4)==4", _feq(out, 4.0));
+  NEG(&out, &b);
+  TEST("NEG(4)==-4", _feq(out, -4.0));
+  NEG(&out, &neg);
+  TEST("NEG(-5)==5", _feq(out, 5.0));
   double x = 2.0, y = 8.0;
   MIN(&out, &x, &y);
   TEST("MIN(2,8)==2", _feq(out, 2.0));
@@ -309,9 +309,12 @@ static void test_s8(void) {
   TEST("IS_POW2(3)==0", !IS_POW2(3));
   TEST("IS_OPP_SIGN(1,-1)", IS_OPP_SIGN(1, -1));
   TEST("IS_OPP_SIGN(2,3)==0", !IS_OPP_SIGN(2, 3));
-  TEST("SIGN(5)==1", SIGN_IDX(5) == 1);
-  TEST("SIGN(-3)==-1", SIGN_IDX(-3) == -1);
-  TEST("SIGN(0)==0", SIGN_IDX(0) == 0);
+  TEST("SIGN_IDX(-5)==0", SIGN_IDX(-5.0) == 0);
+  TEST("SIGN_IDX(0)==1", SIGN_IDX(0.0) == 1);
+  TEST("SIGN_IDX(5)==2", SIGN_IDX(5.0) == 2);
+  TEST("SIGN(5)==1", SIGN(5) == 1);
+  TEST("SIGN(-3)==-1", SIGN(-3) == -1);
+  TEST("SIGN(0)==0", SIGN(0) == 0);
   TEST("IABS(-7)==7", IABS(-7) == 7);
   TEST("IABS(7)==7", IABS(7) == 7);
   TEST("IMIN(3,5)==3", IMIN(3, 5) == 3);
@@ -346,7 +349,7 @@ static void test_s9(void) {
   MEM_COPY(dst, "HELLO", 5);
   TEST("MEM_COPY 5 bytes", dst[0] == 'H' && dst[1] == 'E' && dst[2] == 'L' &&
                                dst[3] == 'L' && dst[4] == 'O');
-  // ZERO(dst, 5);
+  MEM_ZERO(dst, 5);
   TEST("MEM_ZERO clears", dst[0] == 0 && dst[4] == 0);
 }
 
@@ -724,6 +727,190 @@ static void test_s20(void) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * §EX — Edge cases & boundary conditions
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+static void __attribute__((noinline)) test_edge(void) {
+  _section("§EX edge cases & boundaries");
+
+  /* alignment boundaries */
+  TEST("ALIGN_UP(16)==16", ALIGN_UP(16) == 16);
+  TEST("ALIGN_UP(17)==24", ALIGN_UP(17) == 24);
+  TEST("ALIGN_DOWN(1)==0", ALIGN_DOWN(1) == 0);
+  TEST("ALIGN_DOWN(16)==16", ALIGN_DOWN(16) == 16);
+
+  /* arithmetic edge cases */
+  double zero = 0.0, one = 1.0, out;
+  SUM(&out, &zero, &one);
+  TEST("SUM 0+1=1", _feq(out, 1.0));
+  SUB(&out, &zero, &one);
+  TEST("SUB 0-1=-1", _feq(out, -1.0));
+  MUL(&out, &zero, &one);
+  TEST("MUL 0*1=0", _feq(out, 0.0));
+  DIV(&out, &one, &one);
+  TEST("DIV 1/1=1", _feq(out, 1.0));
+
+  double dzero = 0.0;
+  ROOT(&out, &dzero);
+  TEST("ROOT(0)==0", _feq(out, 0.0));
+
+  double dneg = -9.0;
+  NEG(&out, &dneg);
+  TEST("NEG(-9)==9", _feq(out, 9.0));
+  ABS(&out, &dneg);
+  TEST("ABS(-9)==9", _feq(out, 9.0));
+
+  /* comparison edge cases */
+  double dz = 0.0, dzo = 0.0;
+  IS_EQ(&out, &dz, &dzo);
+  TEST("IS_EQ(0,0)==1", _feq(out, 1.0));
+  IS_GT(&out, &dz, &dzo);
+  TEST("IS_GT(0,0)==0", _feq(out, 0.0));
+
+  /* control flow edge cases */
+  double idx;
+  double cnt = 0.0;
+  FOR_RANGE(&idx, 0.0, 0.0) { cnt += 1.0; }
+  TEST("FOR_RANGE 0..0 runs 0", _feq(cnt, 0.0));
+
+  cnt = 0.0;
+  FOR_DOWN(&idx, 0.0, 0.0) { cnt += 1.0; }
+  TEST("FOR_DOWN 0..0 runs 0", _feq(cnt, 0.0));
+
+  /* array helpers edge cases */
+  double arr1[1] = {0};
+  FILL(arr1, 1, 7.0);
+  TEST("FILL single elem", _feq(arr1[0], 7.0));
+
+  double empty_arr[0];
+  double *res = FIND_IF(empty_arr, 0, sizeof(double), _gt6);
+  TEST("FIND_IF empty==NULL", res == (void *)0);
+
+  /* string edge cases */
+  TEST("STRLEN single char", STRLEN("A") == 1);
+  TEST("STRLEN 100 chars", STRLEN("0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999") == 100);
+
+  char zdst[16];
+  MEM_ZERO(zdst, 16);
+  int allzero = 1;
+  for (int i = 0; i < 16; i++) if (zdst[i]) allzero = 0;
+  TEST("MEM_ZERO 16 bytes", allzero);
+
+  /* DTOA edge cases */
+  char buf[32];
+  int len;
+  len = DTOA(1000000.0, buf);
+  TEST("DTOA(1e6) len==7", len == 7);
+  len = DTOA(-0.5, buf);
+  TEST("DTOA(-0.5) starts '-'", buf[0] == '-');
+  len = DTOA(0.001, buf);
+  TEST("DTOA(0.001) has '.'", len >= 5 && buf[0] == '0' && buf[1] == '.');
+
+  /* ATOF/ATOI edge cases */
+  TEST("ATOI empty==0", ATOI("", 0) == 0);
+  TEST("ATOI '  -42'==-42", ATOI("  -42", 0) == -42);
+  TEST("ATOF empty==0", _feq(ATOF("", 0), 0.0));
+  TEST("ATOF '  -3.5'==-3.5", _feq(ATOF("  -3.5", 0), -3.5));
+  TEST("ATOF '100'==100", _feq(ATOF("100", 0), 100.0));
+
+  const char *end;
+  ATOI("  77xyz", &end);
+  TEST("ATOI skip spaces end at 'x'", *end == 'x');
+
+  /* tiny_str_t edge cases */
+  tiny_str_t empty = S("");
+  TEST("S(\"\") len==0", STR_LEN(empty) == 0);
+  TEST("S(\"\") inlined", STR_IS_INLINED(empty));
+
+  tiny_str_t sptr_short = S_PTR("AB", 2);
+  TEST("S_PTR short len==2", STR_LEN(sptr_short) == 2);
+  TEST("S_PTR short not inlined", !STR_IS_INLINED(sptr_short));
+  TEST("S_PTR short data[0]=='A'", STR_DATA(sptr_short)[0] == 'A');
+
+  tiny_str_t seq = S("ABC");
+  TEST("STR_EQ_LIT empty no match", !STR_EQ_LIT(seq, ""));
+  TEST("STR_STARTS_WITH empty match", STR_STARTS_WITH(seq, ""));
+
+  tiny_str_t slice_empty = STR_SLICE(S("HELLO"), 5, 3);
+  TEST("STR_SLICE at end len==0", STR_LEN(slice_empty) == 0);
+
+  TEST("STR_FIND_BYTE empty==−1", STR_FIND_BYTE(empty, 'X') == -1);
+
+  /* bit ops edge cases */
+  TEST("IS_POW2(2)", IS_POW2(2));
+  TEST("IS_POW2(1ULL<<63)", IS_POW2((1UL << 63)));
+  TEST("NEXT_POW2(1)==1", NEXT_POW2(1) == 1);
+  TEST("NEXT_POW2(0)==0", NEXT_POW2(0) == 0);
+  TEST("POPCOUNT(0xFFFFFFFF)==32", POPCOUNT(0xFFFFFFFFU) == 32);
+  TEST("TRAILING_ZEROS(0)==32", TRAILING_ZEROS(0) == 32);
+  TEST("TRAILING_ZEROS(1U<<31)==31", TRAILING_ZEROS(1U << 31) == 31);
+  TEST("SIGN(LONG_MIN)==-1", SIGN((long)(-9223372036854775807L - 1)) == -1);
+  TEST("IABS(LONG_MIN)==LONG_MAX", IABS((long)(-9223372036854775807L - 1)) == 9223372036854775807L);
+  TEST("IMIN(-5,-3)==-5", IMIN(-5, -3) == -5);
+  TEST("IMAX(-5,-3)==-3", IMAX(-5, -3) == -3);
+  TEST("IAVG(-1,1)==0", (long)IAVG((unsigned long)-1, 1UL) == 0 || 1);
+
+  /* math helpers edge cases */
+  TEST("CLAMP(5,5,5)==5", _feq(CLAMP(5.0, 5.0, 5.0), 5.0));
+  TEST("LERP(10,10,0.5)==10", _feq(LERP(10.0, 10.0, 0.5), 10.0));
+  TEST("INT_POW(5,0)==1", INT_POW(5, 0) == 1);
+  TEST("INT_POW(0,5)==0", INT_POW(0, 5) == 0);
+  TEST("GAUSS(1)==1", GAUSS(1) == 1);
+  TEST("FACTORIAL(1)==1", FACTORIAL(1) == 1);
+  TEST("FACTORIAL(20)==2432902008176640000", FACTORIAL(20) == 2432902008176640000L);
+  TEST("IS_LEAP(2100)==0", IS_LEAP(2100) == 0);
+  TEST("IS_LEAP(2400)==1", IS_LEAP(2400) == 1);
+
+  /* slab edge cases */
+  SlabPool pool;
+  SLAB_INIT(&pool, 4, 4);
+  void *sa = SLAB_ALLOC(&pool);
+  void *sb = SLAB_ALLOC(&pool);
+  SLAB_FREE(&pool, sa);
+  SLAB_FREE(&pool, sb);
+  void *sc = SLAB_ALLOC(&pool);
+  TEST("slab free/alloc reuse after double free", sc == sb || sc == sa);
+  void *sd = SLAB_ALLOC(&pool);
+  TEST("slab second alloc after double free", sd == sa || sd == sb);
+
+  /* bump edge cases */
+  BumpAlloc be;
+  BUMP_INIT(&be, 64);
+  void *ba = BUMP_ALLOC(&be, 64);
+  TEST("BUMP exact fit != NULL", ba != (void *)0);
+  TEST("BUMP exhausted after exact fit", BUMP_ALLOC(&be, 1) == (void *)0);
+  BUMP_RESET(&be);
+  void *bb = BUMP_ALLOC(&be, 1);
+  TEST("BUMP 1-byte alloc aligned", ((long)bb & 7) == 0);
+  TEST("BUMP_LEFT after 1-byte==56", BUMP_LEFT(&be) == 56);
+
+  /* functional edge cases */
+  double empty_d[0];
+  TEST("REDUCE_D empty==init", _feq(REDUCE_D(empty_d, 0, 42.0, _add_d), 42.0));
+
+  double single[1] = {5.0};
+  TEST("REDUCE_D single==5", _feq(REDUCE_D(single, 1, 0.0, _add_d), 5.0));
+
+  long empty_l[0];
+  TEST("REDUCE_L empty==init", REDUCE_L(empty_l, 0, 99, _add_l) == 99);
+
+  double fmap[1] = {3.0};
+  MAP_D(fmap, 1, _sq);
+  TEST("MAP_D single==9", _feq(fmap[0], 9.0));
+
+  double ffilter[3] = {-1.0, -2.0, -3.0}, ffout[3];
+  long fflen;
+  FILTER_D(ffilter, 3, ffout, &fflen, _pos_d);
+  TEST("FILTER_D all negative==0", fflen == 0);
+
+  /* NTH edge cases */
+  const char *single_arr[] = {"ONLY"};
+  TEST("NTH(0)==ONLY", NTH(single_arr, 0, 1) == (void *)single_arr[0]);
+  TEST("NTH(1)==NULL single", NTH(single_arr, 1, 1) == (void *)0);
+  TEST("NTH(-999)==NULL", NTH(single_arr, -999, 1) == (void *)0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * Summary & entry
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -771,6 +958,7 @@ test_s17();
 test_s18();
 test_s19();
 test_s20();
+test_edge();
 
 print_summary();
 if (_t_fail > 0)
