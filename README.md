@@ -62,6 +62,29 @@ sstrip prog   # optional: remove all ELF metadata, ~1KB result
 
 ---
 
+## TEST
+
+Run the deterministic unit suite for the pure `tiny.h` API:
+
+```sh
+make test
+```
+
+The suite uses a libc-backed test runner for reporting while exercising the
+header's alignment, arithmetic, comparison, array, integer, string, parsing,
+numeric, and functional helpers. Low-level namespace, terminal, raw-syscall,
+and `brk` behavior remains in `test.c` as integration coverage because those
+checks depend on host permissions and a TTY.
+
+The low-level targets are available when their host requirements are met:
+
+```sh
+make test_integration_libc
+make test_nostdlib       # also requires tiny.ld
+```
+
+---
+
 ## MINIMAL PROGRAM
 
 ```c
