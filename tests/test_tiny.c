@@ -69,7 +69,8 @@ static void test_comparisons_and_arrays(void) {
   double high = 5.0;
   double result = 0.0;
   double values[] = {3.0, 1.0, 2.0};
-  double sum = 0.0;
+  double replacement = 9.0;
+  double fetched = 0.0;
 
   IS_LT(&result, &low, &high);
   CHECK("IS_LT returns a true double flag", double_eq(result, 1.0));
@@ -78,13 +79,14 @@ static void test_comparisons_and_arrays(void) {
   CMP(&result, &high, &low);
   CHECK("CMP returns positive ordering", double_eq(result, 1.0));
 
-  ARRAY_SUM(&sum, values, 3);
-  CHECK("ARRAY_SUM totals values", double_eq(sum, 6.0));
-  ARRAY_SORT(values, 3);
-  CHECK("ARRAY_SORT orders ascending",
-        double_eq(values[0], 1.0) && double_eq(values[1], 2.0) &&
-            double_eq(values[2], 3.0));
-  CHECK("ARRAY_FIND locates a value", ARRAY_FIND(values, 3, 2.0) == 1);
+  FILL(values, 3, 4.0);
+  CHECK("FILL assigns every array element",
+        double_eq(values[0], 4.0) && double_eq(values[2], 4.0));
+  ARRAY_SET(values, 1, &replacement);
+  ARRAY_GET(values, 1, &fetched);
+  CHECK("ARRAY_SET and ARRAY_GET move values", double_eq(fetched, 9.0));
+  ZERO(&fetched);
+  CHECK("ZERO clears one double", double_eq(fetched, 0.0));
 }
 
 static void test_integer_helpers(void) {

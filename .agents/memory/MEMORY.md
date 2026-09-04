@@ -1,0 +1,1 @@
+- [Testing strategy](testing-strategy.md) — keep pure API unit tests libc-backed; raw syscall, TTY, namespace, and brk checks are environment-dependent integration tests.
