@@ -1,160 +1,499 @@
-# ⚠️ ALPHA. NO WARRANTY. YOU BREAK IT, YOU OWN PIECES.
-
----
-
 # tiny.h
 
-Single header. No libc. x86-64 Linux only.
+> ⚠️ **ALPHA. NO WARRANTY.**
+>
+> You break it, you own the pieces.
 
- write this because C string bad, malloc bad, include 47 headers for `printf` bad.
- want write program that yell at operating system directly. No middleman. No mystery.
+Single-header, no-libc runtime toolkit for **x86-64 Linux** written in C.
 
-This not safe. This not portable. This not for production.
-This for learning, for fun, for AED homework that run in 1152 bytes.
+`tiny.h` provides direct Linux syscalls, manual memory management, SSE/x87-backed floating-point operations, low-level string and memory primitives, terminal I/O, namespace isolation, and a small functional-programming toolkit.
 
----
+It is intentionally low-level, macro-heavy, non-portable, and opinionated.
 
-## WHAT THIS IS
+The goal is not to replace libc.
 
-Direct syscall toolkit. Macro-heavy. Inline asm everywhere.
-Philosophy: **data is truth. code is pointer arithmetic. branches are shame.**
+The goal is to make it possible to write small C programs that talk to the Linux kernel directly, with very little machinery in between.
 
-Stack = scratchpad. XMM registers = calculator. `brk` = heap. Kernel = only friend.
-
----
-
-## WHAT THIS IS NOT
-
-- Not libc replacement
-- Not safe
-- Not portable (x86-64 Linux ONLY, hard error if wrong)
-- Not finished
-- Not your fault when it breaks (actually maybe your fault)
-
----
-
-## PLATFORM
-
+```text
+data is truth
+code is pointer arithmetic
+branches are shame
+kernel is friend
 ```
+
+## ⚠️ Status
+
+This project is **experimental and educational**.
+
+It is useful for:
+
+- learning how C maps onto machine instructions;
+- learning Linux system calls and ABI details;
+- experimenting with custom runtime environments;
+- writing very small binaries;
+- AED/homework-style exercises;
+- terminal experiments and tiny games;
+- exploring manual memory management;
+- experimenting with low-level functional-style helpers.
+
+It is **not**:
+
+- a libc replacement;
+- portable C;
+- safe for production software;
+- thread-safe;
+- ABI-independent;
+- feature-complete;
+- a general-purpose allocator;
+- a standards-compliant replacement for `printf`, `malloc`, `strlen`, `strtod`, etc.
+
+Expect sharp edges. Some of them are intentional. Some of them are bugs. Distinguishing between the two is one of the project's more educational features.
+
+---
+
+# Platform
+
+`tiny.h` currently targets exactly:
+
+```text
 Architecture : x86-64
 OS           : Linux
-Compiler     : GCC with GNU inline asm + SSE2
+Compiler     : GCC
+Assembly     : GNU inline assembly
+Floating point: SSE2 + x87
+Runtime      : direct syscalls, optionally no libc
 ```
 
-Header guards enforce this. Wrong arch = `#error` at compile time. Good.
+The header contains compile-time checks and should fail when compiled for unsupported architectures.
+
+There is no portability layer.
+
+There is no Windows implementation.
+
+There is no ARM implementation.
+
+There is no “we'll abstract it later”.
 
 ---
 
-## BUILD
+# Repository layout
 
-```sh
-# with libc (quick test, normal main)
-gcc -O2 -fno-omit-frame-pointer -fno-builtin prog.c -o prog
+```text
+tiny.h
+    The entire runtime API.
+    Single header, roughly 1670 lines / 72 KB.
 
-# without libc (real tiny, _start entry)
-gcc -O2 -fno-omit-frame-pointer -fno-builtin -nostdlib \
-    -D_TINY_NOSTDLIB -T tiny.ld prog.c -o prog
-sstrip prog   # optional: remove all ELF metadata, ~1KB result
+example.c
+    Example program.
+
+test.c
+    Low-level integration tests, roughly 1000 lines.
+
+tests/test_tiny.c
+    Deterministic unit-test suite.
+
+Makefile
+    Builds libc and no-libc test targets.
+
+tiny.ld
+    Custom linker script for the no-libc/minimal binary.
+
+LICENSE
+    AGPLv3.
 ```
 
-`-fno-omit-frame-pointer` **required**. `STACK(off)` reads `rbp`. No `rbp` = chaos.
-`-fno-builtin` **required**. Without it GCC replaces loops with `memcpy` call = linker fail.
+The header is organized into sections:
+
+```text
+§1   Syscall numbers
+§2   Alignment and pointer utilities
+§3   Stack-frame helpers
+§4   Scalar f64 arithmetic
+§5   f64 comparisons
+§6   f64 control flow
+§7   f64 array helpers
+§8   Integer bit operations
+§9   String and memory operations
+§10  Parsing and numeric conversion
+§11  I/O
+§12  Memory allocation
+§13  tiny_str_t / small-string optimization
+§14  Math constants and numeric helpers
+§15  Interactive terminal input
+§16  Entry points
+§17  Functional programming helpers
+§18  Linux namespaces
+§19  Bump allocator
+§20  Terminal and game loop
+```
 
 ---
 
-## TEST
+# Quick Start
 
-Run the deterministic unit suite for the pure `tiny.h` API:
-
-```sh
-make test
-```
-
-The suite uses a libc-backed test runner for reporting while exercising the
-header's alignment, arithmetic, comparison, array, integer, string, parsing,
-numeric, and functional helpers. Low-level namespace, terminal, raw-syscall,
-and `brk` behavior remains in `test.c` as integration coverage because those
-checks depend on host permissions and a TTY.
-
-The low-level targets are available when their host requirements are met:
+## 1. Clone the project
 
 ```sh
-make test_integration_libc
-make test_nostdlib       # also requires tiny.ld
+git clone <repository-url>
+cd <repository-directory>
 ```
+
+## 2. Build a normal libc-backed program
+
+This is the easiest mode for development and testing.
+
+```sh
+gcc -O2 \
+    -fno-omit-frame-pointer \
+    -fno-builtin \
+    prog.c \
+    -o prog
+```
+
+Run it normally:
+
+```sh
+./prog
+```
+
+## 3. Build without libc
+
+This is the interesting mode.
+
+```sh
+gcc -O2 \
+    -fno-omit-frame-pointer \
+    -fno-builtin \
+    -nostdlib \
+    -D_TINY_NOSTDLIB \
+    -T tiny.ld \
+    prog.c \
+    -o prog
+```
+
+Optionally strip ELF metadata:
+
+```sh
+sstrip prog
+```
+
+The resulting binary can be dramatically smaller than an ordinary dynamically linked program.
+
+The actual size depends on the program and linker/toolchain behavior. The project includes examples targeting extremely small binaries, but size should be treated as an experiment rather than a promise.
 
 ---
 
-## MINIMAL PROGRAM
+# Why these compiler flags matter
+
+Two flags are particularly important.
+
+## `-fno-omit-frame-pointer`
+
+`STACK(off)` accesses memory relative to `rbp`.
+
+That means the generated code expects a conventional frame pointer.
+
+Without:
+
+```sh
+-fno-omit-frame-pointer
+```
+
+the compiler may use `rbp` for something else or omit the frame pointer entirely.
+
+Then code using `STACK(off)` can stop meaning what you think it means.
+
+In other words:
+
+```text
+STACK(off)
+    ↓
+rbp-relative addressing
+    ↓
+requires predictable rbp
+```
+
+Do not casually remove this flag.
+
+## `-fno-builtin`
+
+The no-libc mode does not provide libc functions.
+
+GCC is still allowed to recognize operations as built-ins and replace them with library/helper calls.
+
+For example, apparently innocent code can turn into a call to an external helper such as:
+
+```text
+memcpy
+__divdi3
+__moddi3
+```
+
+which defeats the whole point of the no-libc build.
+
+Use:
+
+```sh
+-fno-builtin
+```
+
+in no-libc builds.
+
+---
+
+# Minimal program
+
+The same source can be compiled in either mode.
 
 ```c
 #include "tiny.h"
 
 BEGIN
-    PRINTLN_STR(" say hello", 14);
+    PRINTLN_STR("say hello", 9);
 END
 ```
 
-`BEGIN`/`END` expand to `main()` or naked `_start` depending on `_TINY_NOSTDLIB`.
-Same source file compiles both ways. No code change needed.
+With libc:
 
----
-
-## SECTION REFERENCE
-
----
-
-### §1 — Syscall Numbers
-
-```c
-SYS_READ   0     SYS_WRITE  1     SYS_EXIT  60
-SYS_BRK    12    SYS_IOCTL  16    SYS_POLL   7
-SYS_OPEN   2     SYS_CLOSE  3     SYS_UNSHARE 272
-SYS_GETUID 102   SYS_GETGID 104
-STDIN 0    STDOUT 1
+```sh
+gcc -O2 -fno-omit-frame-pointer -fno-builtin prog.c -o prog
 ```
 
-`_Static_assert` guards on critical values. If kernel ABI changes, header fails loudly.
+Without libc:
+
+```sh
+gcc -O2 \
+    -fno-omit-frame-pointer \
+    -fno-builtin \
+    -nostdlib \
+    -D_TINY_NOSTDLIB \
+    -T tiny.ld \
+    prog.c \
+    -o prog
+```
+
+`BEGIN` and `END` adapt the entry point automatically.
+
+In normal mode they behave approximately like:
+
+```c
+int main(void) {
+    ...
+    return 0;
+}
+```
+
+In no-libc mode they create a tiny runtime entry path using `_start` and direct exit syscalls.
+
+The important idea is:
+
+```text
+same program
+     │
+     ├── libc build
+     │      → main()
+     │
+     └── no-libc build
+            → _start
+            → tiny runtime
+            → Linux syscalls
+```
 
 ---
 
-### §2 — Alignment & Pointer Utils
+# Testing
 
-```c
-ALIGN_UP(s)         // round s up to next 8-byte boundary
-ALIGN_DOWN(s)       // round s down to 8-byte boundary
-OFFSET(ptr, bytes)  // ptr + bytes (byte arithmetic, any type)
-INDEX(base, i)      // &((double*)base)[i]
-DEREF(addr)         // *(double*)addr
+Run the deterministic unit suite:
+
+```sh
+make test
 ```
 
-`ALIGN_UP` used everywhere — slab, bump, stack layout.
-`DEREF` read/write double at void* addr.  use often.
+The unit tests exercise the API without requiring unusual host behavior.
+
+Coverage includes:
+
+```text
+alignment
+arithmetic
+comparisons
+arrays
+integer operations
+strings
+parsing
+numeric helpers
+functional helpers
+```
+
+The lower-level integration tests are separate because they depend on Linux behavior, process permissions, terminal state, or the host environment.
+
+```sh
+make test_integration_libc
+```
+
+and:
+
+```sh
+make test_nostdlib
+```
+
+The no-libc integration target requires `tiny.ld`.
+
+A useful mental model is:
+
+```text
+make test
+    deterministic API tests
+
+make test_integration_libc
+    runtime + Linux integration with libc
+
+make test_nostdlib
+    actual no-libc integration
+```
+
+Passing the unit tests does **not** mean the project is production-safe.
+
+It means the test suite passed.
+
+Humanity has historically confused those two concepts.
 
 ---
 
-### §3 — Stack Frame Helpers
+# How the runtime fits together
 
-```c
-STACK(off)      // void* to [rbp - off] in current frame
-PUSH_FRAME(n)   // naked fn only: push rbp, set frame, reserve n bytes
-POP_FRAME       // naked fn only: restore rbp/rsp
+A typical program looks approximately like this:
+
+```text
+             your C source
+                  │
+                  ▼
+             tiny.h macros
+                  │
+        ┌─────────┼──────────┐
+        │         │          │
+        ▼         ▼          ▼
+      stack      XMM        heap
+    STACK(off) registers     brk
+        │         │          │
+        └─────────┼──────────┘
+                  ▼
+          direct Linux syscalls
+                  │
+                  ▼
+                kernel
 ```
 
-`STACK(off)` is how  name stack memory:
+There is deliberately very little between your code and the kernel.
+
+The stack is commonly used as the primary working area.
+
+Floating-point values are manipulated through explicit SSE/XMM operations.
+
+Heap memory comes from `brk`.
+
+I/O is performed directly through syscalls.
+
+The no-libc build does not rely on the usual C runtime startup or standard library.
+
+---
+
+# API Reference
+
+## §1 — Syscalls
+
+The header defines syscall numbers used by the runtime.
+
+Examples:
+
+```c
+SYS_READ
+SYS_WRITE
+SYS_EXIT
+SYS_BRK
+SYS_IOCTL
+SYS_POLL
+SYS_OPEN
+SYS_CLOSE
+SYS_UNSHARE
+
+SYS_GETUID
+SYS_GETGID
+
+STDIN
+STDOUT
+```
+
+Important values include:
+
+```text
+read       0
+write      1
+open       2
+close      3
+poll       7
+brk       12
+ioctl     16
+exit      60
+unshare   272
+```
+
+Critical values are guarded with `_Static_assert`.
+
+---
+
+# §2 — Alignment and pointer utilities
+
+```c
+ALIGN_UP(s)
+ALIGN_DOWN(s)
+
+OFFSET(ptr, bytes)
+INDEX(base, i)
+DEREF(addr)
+```
+
+Typical use:
+
+```c
+void *p = OFFSET(base, 16);
+double *x = INDEX(array, 4);
+double value = DEREF(addr);
+```
+
+`ALIGN_UP` rounds values to the project's required 8-byte alignment and is used throughout the allocators and stack-layout helpers.
+
+---
+
+# §3 — Stack-frame helpers
+
+```c
+STACK(off)
+PUSH_FRAME(n)
+POP_FRAME
+```
+
+`STACK(off)` provides an address relative to the current frame:
 
 ```c
 #define MY_VAR  STACK(8)
 #define MY_VAR2 STACK(16)
-// ...
+
 DEF(MY_VAR, 42.0);
 PRINTLN(MY_VAR);
 ```
 
-**`PUSH_FRAME`/`POP_FRAME` only safe in `__attribute__((naked))` functions.**
-In normal functions GCC owns frame. Do not fight GCC.  learn hard way.
+## Important
 
-Stack layout macro pattern (clean, zero-cost):
+`PUSH_FRAME` and `POP_FRAME` are intended only for naked functions:
+
+```c
+__attribute__((naked))
+```
+
+Do not manually take over GCC's stack frame management in an ordinary C function.
+
+A recommended layout style is:
 
 ```c
 enum {
@@ -163,603 +502,1567 @@ enum {
     OFF_RESULT = OFF_Y + ALIGN_UP(sizeof(double)),
     TOTAL      = OFF_RESULT + ALIGN_UP(sizeof(double))
 };
+
 #define VAR_X      STACK(OFF_X)
 #define VAR_Y      STACK(OFF_Y)
 #define VAR_RESULT STACK(OFF_RESULT)
 ```
 
----
+Prefer named offsets over magic numbers.
 
-### §4 — XMM Scalar f64 Arithmetic
-
-All ops take `void*` addresses. All use `xmm0`/`xmm1`. All `volatile` — optimizer cannot remove.
-
-```c
-DEF(addr, val)      // *addr = literal double
-COPY(dst, src)      // *dst  = *src
-SWAP(a, b)          // swap *a, *b  (two xmm regs, no stack temp)
-INC(addr)           // *addr += 1.0
-DEC(addr)           // *addr -= 1.0
-SUM(out, a, b)      // *out = *a + *b
-SUB(out, a, b)      // *out = *a - *b
-MUL(out, a, b)      // *out = *a * *b
-DIV(out, a, b)      // *out = *a / *b
-MOD(out, a, b)      // *out = fmod(*a, *b)  via x87 fprem1, no libm
-ROOT(out, a)        // *out = sqrt(*a)       sqrtsd, one instruction
-ABS(out, a)         // *out = |*a|           andpd sign mask, branchless
-NEG(out, a)         // *out = -*a            xorpd sign bit, branchless
-MIN(out, a, b)      // *out = min(*a, *b)    minsd
-MAX(out, a, b)      // *out = max(*a, *b)    maxsd
-AVG(out, a, b)      // *out = (*a + *b) * 0.5
-```
-
-`MOD` uses x87 `fprem1` loop. Correct but slower than others. Fine for homework.
-`ABS`/`NEG` are bitmask ops — no branch, no comparison, just flip sign bit.
+That way, changing the frame layout means changing one enum instead of hunting through a pile of unexplained `STACK(56)` calls.
 
 ---
 
-### §5 — f64 Comparisons → Double Flag
+# §4 — Scalar f64 arithmetic
 
-Store result as `1.0` (true) or `0.0` (false) at `out`. Use `ucomisd` — NaN safe.
+Operations work on addresses containing `double`.
 
 ```c
-IS_GT(out, a, b)    // *out = (*a >  *b) ? 1.0 : 0.0
-IS_LT(out, a, b)    // *out = (*a <  *b) ? 1.0 : 0.0
-IS_GE(out, a, b)    // *out = (*a >= *b) ? 1.0 : 0.0
-IS_LE(out, a, b)    // *out = (*a <= *b) ? 1.0 : 0.0
-IS_EQ(out, a, b)    // *out = (*a == *b) ? 1.0 : 0.0
-IS_NE(out, a, b)    // *out = (*a != *b) ? 1.0 : 0.0
-CMP(out, a, b)      // *out = -1.0 / 0.0 / 1.0  (less/equal/greater)
+DEF(addr, val)
+COPY(dst, src)
+SWAP(a, b)
+
+INC(addr)
+DEC(addr)
+
+SUM(out, a, b)
+SUB(out, a, b)
+MUL(out, a, b)
+DIV(out, a, b)
+MOD(out, a, b)
+
+ROOT(out, a)
+ABS(out, a)
+NEG(out, a)
+
+MIN(out, a, b)
+MAX(out, a, b)
+AVG(out, a, b)
 ```
 
-`CMP` useful for sort comparators. `IS_*` useful for storing condition results
-in stack slots and branching later, or using as multiplier masks.
+Example:
+
+```c
+DEF(STACK(8), 10.0);
+DEF(STACK(16), 3.0);
+
+DIV(STACK(24), STACK(8), STACK(16));
+PRINTLN(STACK(24));
+```
+
+`ROOT` uses `sqrtsd`.
+
+`ABS` and `NEG` are implemented using bit manipulation on the floating-point representation rather than branches.
+
+`MOD` uses x87 `fprem1`.
+
+It is functional, but its latency is variable and can be significantly worse than the other arithmetic helpers for some inputs.
 
 ---
 
-### §6 — f64 Control Flow
+# §5 — f64 comparisons
 
-```c
-FOR_RANGE(idx_addr, start, end)   // forward loop, INC each iter
-FOR_DOWN(idx_addr, start, end)    // reverse loop, DEC each iter
-WHILE_NZ(flag_addr)               // loop while *flag != 0.0
-IF_GT(a, b)  { }                  // conditional block
-IF_LT(a, b)  { }
-IF_GE(a, b)  { }
-IF_LE(a, b)  { }
-IF_EQ(a, b)  { }
-IF_NE(a, b)  { }
+Comparison results are stored as doubles:
+
+```text
+true  = 1.0
+false = 0.0
 ```
 
-`idx_addr` must be `void*` to double on stack. `start`/`end` are double literals.
+Available operations:
+
+```c
+IS_GT(out, a, b)
+IS_LT(out, a, b)
+IS_GE(out, a, b)
+IS_LE(out, a, b)
+IS_EQ(out, a, b)
+IS_NE(out, a, b)
+
+CMP(out, a, b)
+```
+
+`CMP` produces:
+
+```text
+-1.0   less than
+ 0.0   equal
+ 1.0   greater than
+```
+
+This is useful for sort-style comparators.
+
+The comparison implementation uses `ucomisd`.
+
+---
+
+# §6 — f64 control flow
+
+```c
+FOR_RANGE(idx_addr, start, end)
+FOR_DOWN(idx_addr, start, end)
+WHILE_NZ(flag_addr)
+
+IF_GT(a, b) { ... }
+IF_LT(a, b) { ... }
+IF_GE(a, b) { ... }
+IF_LE(a, b) { ... }
+IF_EQ(a, b) { ... }
+IF_NE(a, b) { ... }
+```
+
+Example:
 
 ```c
 FOR_RANGE(STACK(8), 0.0, 10.0) {
-    // DEREF(STACK(8)) is current index
     PRINTLN(STACK(8));
 }
 ```
 
+The loop index is stored as a `double` in the provided address.
+
 ---
 
-### §7 — f64 Array Helpers
+# §7 — f64 arrays
 
 ```c
-FILL(base, count, val)        // set count doubles to val
-ZERO(addr)                    // zero one double slot  (= DEF(addr, 0.0))
-ARRAY_GET(base, i, dst)       // dst = base[i]
-ARRAY_SET(base, i, src)       // base[i] = src
+FILL(base, count, val)
+ZERO(addr)
 
+ARRAY_GET(base, i, dst)
+ARRAY_SET(base, i, src)
+```
+
+There are also generic pointer-array helpers:
+
+```c
 NTH(arr, idx, len)
-// bounds-checked pointer into any pointer array
-// returns arr[idx] if 0 <= idx < len, NULL otherwise
-// NULL = "not valid index". 0 IS valid index. negative idx → wraps to huge → NULL.
-// example:
-const char *days[] = {"MON","TUE","WED","THU","FRI","SAT","SUN"};
+find_if(base, count, stride, pred)
+```
+
+`NTH` returns `NULL` for an invalid index.
+
+```c
+const char *days[] = {
+    "MON", "TUE", "WED", "THU",
+    "FRI", "SAT", "SUN"
+};
+
 const char *d = NTH(days, 2, 7);   // "WED"
 const char *x = NTH(days, 9, 7);   // NULL
-
-find_if(base, count, stride, pred)
-// linear scan, returns void* to first match or NULL
-// pred: static inline int my_pred(void *p) { return *(double*)p > 0.0; }
 ```
 
 ---
 
-### §8 — Integer Bit Ops
+# §8 — Integer bit operations
 
-Branchless integer hacks. Techniques from Sean Eron Anderson's Bit Twiddling Hacks (public domain).
+The project contains several branchless bit-manipulation helpers:
 
 ```c
-IS_POW2(v)          // 1 if v is power of 2 (v > 0)
-IS_OPP_SIGN(x, y)   // 1 if x and y have opposite signs
-SIGN(v)             // -1, 0, or +1
-IABS(v)             // |v| without branch  (signed long)
-IMIN(x, y)          // branchless min  (signed long)
-IMAX(x, y)          // branchless max  (signed long)
-IAVG(x, y)          // (x+y)/2 without overflow: (x&y)+((x^y)>>1)
-MERGE(a, b, mask)   // bits from b where mask=1, from a where mask=0
-NEXT_POW2(v)        // round up to next power of 2 (32-bit)
-POPCOUNT(v)         // count set bits (32-bit, parallel Hamming weight)
-TRAILING_ZEROS(v)   // count trailing zero bits (DeBruijn multiply, 32-bit)
+IS_POW2(v)
+IS_OPP_SIGN(x, y)
+SIGN(v)
+
+IABS(v)
+IMIN(x, y)
+IMAX(x, y)
+IAVG(x, y)
+
+MERGE(a, b, mask)
+NEXT_POW2(v)
+POPCOUNT(v)
+TRAILING_ZEROS(v)
 ```
 
-`IAVG` overflow-safe — no `(x+y)` intermediate. Use instead of `(x+y)/2`.
-`NEXT_POW2` useful for slab/hash table sizing.
-`TRAILING_ZEROS` uses DeBruijn sequence multiply — O(1), no loop, no branch.
+Examples:
 
-**Warning:** do NOT use `%` operator in `-nostdlib` code. GCC replaces with `__moddi3`
-from libgcc = undefined symbol = segfault. Use `& 1` for even/odd, shifts for powers of 2.
+```c
+IS_POW2(16)
+SIGN(-4)
+IAVG(a, b)
+NEXT_POW2(37)
+POPCOUNT(mask)
+```
+
+`IAVG` avoids the overflow-prone intermediate:
+
+```c
+(x + y) / 2
+```
+
+and instead computes the average using bit operations.
+
+`TRAILING_ZEROS` uses a De Bruijn sequence.
 
 ---
 
-### §9 — String & Memory Ops
+# ⚠️ Integer division in no-libc mode
 
-```c
-STRLEN(s)              // NUL-terminated string length via repne scasb
-                       // returns long. Does NOT count NUL byte.
-MEM_COPY(dst, src, n)  // copy n bytes via rep movsb
-MEM_ZERO(dst, n)       // zero n bytes via rep stosb
+Be particularly careful with ordinary integer arithmetic in `-nostdlib` builds.
+
+The compiler may emit calls to libgcc helpers such as:
+
+```text
+__moddi3
+__divdi3
 ```
 
-All three use rep-string instructions — efficient, correct, no libm.
-`STRLEN` scans using `rdi`/`rcx`/`al`. Cost O(n). Called at runtime, not compile-time.
+Those helpers are not provided automatically by `tiny.h`.
+
+For example, code such as:
+
+```c
+x % y
+x / y
+```
+
+can produce unresolved runtime dependencies depending on the type and target.
+
+For simple power-of-two cases, use bit operations where appropriate:
+
+```c
+x & 1
+x >> n
+```
+
+Do not assume that “it's C, therefore the compiler must turn it into one instruction.”
+
+Compilers enjoy surprises.
 
 ---
 
-### §10 — Parsing & Conversion
+# §9 — String and memory operations
 
 ```c
-DTOA(x, out)              // double → decimal string in out[]. No NUL. Returns length (int).
-                          // out must be >= 32 bytes. Strips trailing fractional zeros.
-                          // Integer part via x87 fbstp (BCD). No soft division.
+STRLEN(s)
 
-ATOF(s, end_ptr)          // decimal string → double.
-                          // Skips leading whitespace. Handles '-'.
-                          // *end_ptr set to first unparsed char (pass NULL to ignore).
-
-ATOI(s, end_ptr)          // decimal string → long.
-                          // Same rules as ATOF.
+MEM_COPY(dst, src, n)
+MEM_ZERO(dst, n)
 ```
 
-`DTOA` accuracy: 15 fractional digits max. Not IEEE-754 round-trip guaranteed.
-Fine for homework, not for serialization.
+These use x86 `rep` string instructions.
 
-`ATOF`/`ATOI` do NOT handle hex, scientific notation, or `NaN`/`Inf`.
+### `STRLEN`
+
+Searches for the terminating NUL byte:
+
+```c
+long n = STRLEN("hello");
+```
+
+Complexity:
+
+```text
+O(n)
+```
+
+There is no explicit maximum length.
+
+A non-terminated string can therefore cause an extremely long scan and potentially fault.
+
+### `MEM_COPY`
+
+Copies exactly `n` bytes:
+
+```c
+MEM_COPY(dst, src, n);
+```
+
+### `MEM_ZERO`
+
+Zeroes exactly `n` bytes:
+
+```c
+MEM_ZERO(ptr, n);
+```
+
+These primitives are functional, but their performance should not automatically be assumed equivalent to optimized libc implementations for large workloads.
 
 ---
 
-### §11 — I/O
-
-All I/O is direct syscall. No buffering. No formatting safety.
+# §10 — Parsing and numeric conversion
 
 ```c
-READ(buf, len)            // read from stdin. Returns bytes read (int).
-PRINT(addr)               // print *(double*)addr to stdout
-PRINTLN(addr)             // print *(double*)addr + '\n'
-PRINT_INT(n)              // print signed long
-PRINTLN_INT(n)            // print signed long + '\n'
-PRINT_STR(ptr, len)       // write raw bytes to stdout
-PRINTLN_STR(ptr, len)     // write raw bytes + '\n'
-EXIT(code)                // _exit syscall. Noreturn. __builtin_unreachable after.
+DTOA(x, out)
+ATOF(s, end_ptr)
+ATOI(s, end_ptr)
 ```
 
-`PRINT_STR(ptr, len)` — **len must be exact**. No NUL detection. Wrong len = garbage or segfault.
-Use `STRLEN(s)` to compute len at runtime, or count manually for literals.
+## `DTOA`
+
+Converts a `double` to decimal text.
+
+```c
+char buf[32];
+
+int len = DTOA(value, buf);
+```
+
+Important:
+
+```text
+buffer size: at least 32 bytes
+output: not NUL-terminated
+maximum: 15 fractional digits
+```
+
+Trailing fractional zeroes are removed.
+
+The conversion is **not guaranteed to produce an IEEE-754 round-trip representation**.
+
+It is intended for small educational programs, not precise serialization.
+
+## `ATOF`
+
+Parses a decimal string:
+
+```c
+const char *end;
+double x = ATOF("123.45abc", &end);
+```
+
+`end` points to the first character that was not consumed.
+
+Leading whitespace and a leading `-` are supported.
+
+## `ATOI`
+
+Same general idea for signed integers:
+
+```c
+long x = ATOI("1234", &end);
+```
+
+## Unsupported formats
+
+The current parsers do not support:
+
+```text
+hexadecimal floating-point
+scientific notation
+NaN
+Inf
+```
+
+The input scan is also not length-bounded.
 
 ---
 
-### §12 — Memory Allocation (brk + Slab)
+# §11 — I/O
+
+All I/O is direct syscall-based and unbuffered.
 
 ```c
-BRK_GET()                 // return current brk (program break)
-BRK_SET(addr)             // set brk to addr, return new brk
-SBRK(n)                   // grow heap by n bytes, return pointer to allocated region
-                          // returns (void*)-1 on failure
+READ(buf, len)
 
-// Slab allocator — fixed-size slots, O(1) alloc/free
+PRINT(addr)
+PRINTLN(addr)
+
+PRINT_INT(n)
+PRINTLN_INT(n)
+
+PRINT_STR(ptr, len)
+PRINTLN_STR(ptr, len)
+
+EXIT(code)
+```
+
+For example:
+
+```c
+PRINTLN_INT(42);
+```
+
+For raw strings:
+
+```c
+PRINT_STR("hello", 5);
+```
+
+`PRINT_STR` does not determine the string length.
+
+The caller is responsible for providing the exact byte count.
+
+Wrong length means you may print garbage or read past the intended memory.
+
+For NUL-terminated strings:
+
+```c
+PRINT_STR(s, STRLEN(s));
+```
+
+---
+
+# §12 — Memory allocation
+
+The runtime exposes Linux `brk` directly:
+
+```c
+BRK_GET()
+BRK_SET(addr)
+SBRK(n)
+```
+
+`SBRK(n)` grows the heap and returns the beginning of the allocated region.
+
+On failure it returns:
+
+```c
+(void *)-1
+```
+
+There are two higher-level allocators.
+
+## Slab allocator
+
+```c
 SlabPool pool;
-SLAB_INIT(&pool, slot_size, total_slots)
-// one SBRK call, builds free list. slot_size auto-aligned via ALIGN_UP.
-// slot_size < sizeof(SlabSlot) → bumped to sizeof(SlabSlot) automatically.
-// returns -1 on SBRK failure.
 
-void *ptr = SLAB_ALLOC(&pool)   // pop free list head. NULL if exhausted.
-SLAB_FREE(&pool, ptr)           // push back to free list. No bounds check.
+SLAB_INIT(&pool, slot_size, total_slots);
+
+void *p = SLAB_ALLOC(&pool);
+
+SLAB_FREE(&pool, p);
 ```
 
-Slab = fixed-size homogeneous data (linked list nodes, tree nodes, game entities).
-Not thread-safe. Not growable. Not forgiving of double-free.
+Characteristics:
+
+```text
+fixed-size objects
+O(1) allocation
+O(1) free
+one large brk allocation
+not thread-safe
+not growable
+```
+
+If `slot_size` is smaller than the minimum slot metadata size, it is increased automatically.
+
+Good for things such as:
+
+```text
+game entities
+tree nodes
+linked-list nodes
+fixed-size objects
+```
+
+Do not use it if you need arbitrary-size allocations or `realloc`.
+
+Do not double-free.
+
+There is little sympathy built into the allocator.
 
 ---
 
-### §13 — tiny_str_t (SSO String)
+# §13 — tiny_str_t
 
-German-style small-string optimization. 16 bytes always.
+`tiny_str_t` is a fixed 16-byte string representation using small-string optimization.
 
+It has two modes.
+
+```text
+INLINE
+
+[ uint32_t length | char data[12] ]
+
+HEAP / VIEW
+
+[ uint32_t length+flag | char prefix[4] | char *ptr ]
 ```
-Inline  (S()):      [ uint32_t len (bit31=0) | char data[12]          ]
-Heap    (S_PTR()):  [ uint32_t len (bit31=1) | char prefix[4] | char* ]
-```
 
-Bit 31 of `length` = heap flag. `STR_LEN` masks it off. Inline ≤ 12 chars stored directly.
-Heap strings borrow pointer — **no ownership, no free, caller manages lifetime.**
-`prefix[4]` = first 4 bytes of heap string, copied on construction. Fast EQ rejection.
+The high bit of the length field indicates heap/view mode.
+
+Inline strings hold up to 12 bytes directly.
+
+Heap-mode strings borrow an external buffer.
+
+They do **not** own the memory.
+
+They do **not** free the memory.
+
+The caller owns the underlying storage.
+
+## Constructors
 
 ```c
-// constructors
-tiny_str_t s  = S("HELLO")              // inline, compile-time, _Static_assert if > 12 chars
-tiny_str_t s  = S_PTR(ptr, len)         // heap borrow, copies prefix
-tiny_str_t s  = S_VIEW(ptr, len)        // alias for S_PTR, signals read-only intent
-tiny_str_t s  = STR_FROM_BUF(buf, len)  // inline if len<=12 (copies), heap if len>12 (borrows)
-tiny_str_t s  = STR_FROM_DOUBLE(x)      // DTOA → STR_FROM_BUF
-tiny_str_t s  = STR_FROM_INT(n)         // _itoa → STR_FROM_BUF
+S("literal")
+S_PTR(ptr, len)
+S_VIEW(ptr, len)
+STR_FROM_BUF(buf, len)
 
-// accessors
-STR_LEN(s)                  // uint32_t length (bit31 masked off)
-STR_IS_INLINED(s)           // 1 if inline mode
-STR_DATA(s)                 // const char* to bytes (correct for both modes)
-
-// comparison
-STR_EQ(s1, s2)              // full equality: len → prefix uint32 → rep cmpsb
-STR_EQ_LIT(s, "lit")        // compare against literal (no temp tiny_str_t)
-STR_STARTS_WITH(s, "pre")   // prefix match
-
-// operations
-STR_SLICE(s, start, n)      // pointer-mode view, no alloc. Borrows from s.
-STR_FIND_BYTE(s, c)         // index of first c via repne scasb, or -1
-
-// I/O
-STR_PRINT(s)                // write to stdout
-STR_PRINTLN(s)              // write to stdout + '\n'
+STR_FROM_DOUBLE(x)
+STR_FROM_INT(n)
 ```
 
-`S("literal")` fires `_Static_assert` if literal > 12 chars at compile time. Good.
-`S_PTR` for anything longer. `STR_SLICE` always returns heap-mode view — no ambiguity.
+`S("literal")` uses a compile-time assertion for literals longer than 12 bytes.
 
-**Common mistake:** building `S_PTR` from a stack buffer then returning the `tiny_str_t`.
-Buffer dies, pointer dangles. Use `STR_FROM_BUF` instead — copies if ≤ 12 chars.
-
----
-
-### §14 — Math Constants & Numeric Helpers
+For example:
 
 ```c
-PI              // 355.0/113.0  (Milü, error < 3e-7, no libm)
-TAU             // 2*PI
-EULER           // 878.0/323.0  (e approximation)
-
-CLAMP(v, lo, hi)        // lo if v<lo, hi if v>hi, else v  (double)
-LERP(a, b, t)           // a + t*(b-a)  linear interpolation
-SIGN_IDX(n)             // 0=negative, 1=zero, 2=positive  → array index
-INT_POW(base, exp)      // base^exp, long, exp>=0, no overflow check
-GAUSS(n)                // n*(n+1)/2  sum of 1..n, long
-FACTORIAL(n)            // n! iterative, long. Overflows for n > 20.
-IS_LEAP(y)              // 1 if y is Gregorian leap year
-SWAP_CHARS(a, b)        // XOR swap two chars, no temp
+tiny_str_t s = S("HELLO");
 ```
 
-`SIGN_IDX` pattern from AED exercises — throw it at a 3-element array:
+For external memory:
 
 ```c
-double buckets[3] = {0};           // [negative, zero, positive]
-buckets[SIGN_IDX(value)] += value; // no if-chain
+tiny_str_t s = S_PTR(ptr, len);
 ```
 
-`IS_LEAP` uses `%` internally → needs libc or `-fno-builtin`. In `-nostdlib` mode,
-replace with bitwise if needed (only powers-of-2 divisors are cheap).
-
----
-
-### §15 — Interactive I/O Helpers
-
-Prompted input pattern. Common in AED homework. Built on `READ` + `ATOF`.
+For a buffer where ownership/lifetime is inconvenient:
 
 ```c
-double n  = LEER_NUMERO("Enter number: ")
-// prints prompt, reads line, returns double
-
-char c    = LEER_LETRA("Enter letter: ")
-// prints prompt, returns first non-space char uppercased
-
-PRINT_LABEL_D("result: ", value)   // label + double + '\n'
-PRINT_LABEL_I("count:  ", n)       // label + long   + '\n'
-PRINT_LABEL_S("name:   ", s, len)  // label + string + '\n'
+tiny_str_t s = STR_FROM_BUF(buf, len);
 ```
 
-`LEER_NUMERO` reads one byte at a time until `\n` or EOF. Max 31 chars.
-`LEER_LETRA` drains whole line, returns first non-space char. Uppercases a-z.
+For short strings, `STR_FROM_BUF` copies into the inline representation.
 
----
+For long strings, it creates a borrowed view.
 
-### §16 — Entry Points (BEGIN / END)
-
-Dual-mode entry. Same source file, two compilation targets.
+## Accessors
 
 ```c
-BEGIN       // expands to: int main(void) {
-END         // expands to: return 0; }
-
-// with -D_TINY_NOSTDLIB:
-BEGIN       // expands to: __attribute__((noinline)) void _tiny_run(void) {
-END         // expands to: EXIT(0); }
-            // _start defined automatically, calls _tiny_run
+STR_LEN(s)
+STR_IS_INLINED(s)
+STR_DATA(s)
 ```
 
-`BEGIN_ISOLATED` variant — same but unshares `CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWUTS`
-before running body. Writes uid/gid maps. Sandboxed execution, no sudo needed.
+## Comparison
 
 ```c
-BEGIN_ISOLATED
-    // running in isolated user+IPC+UTS namespace
-    // uid 0 inside namespace, original uid outside
-END
+STR_EQ(s1, s2)
+STR_EQ_LIT(s, "literal")
+STR_STARTS_WITH(s, "prefix")
 ```
 
----
+`STR_EQ` can reject unequal strings using their stored length and four-byte prefix before doing the full comparison.
 
-### §17 — Functional Toolkit
-
-Higher-order ops over arrays. Function pointer per element. No alloc.
-Inspired by Clojure/FP. Throw function at data, get data back.
+## Operations
 
 ```c
-// function signatures expected:
-double fn_d(double x)              // MAP_D, FOR_EACH_D
-long   fn_l(long x)                // MAP_L, FOR_EACH_L
-double fn_dd(double acc, double x) // REDUCE_D
-long   fn_ll(long acc, long x)     // REDUCE_L
-double fn_zip(double a, double b)  // ZIP_D
-int    pred_d(const double *p)     // FILTER_D
-int    pred_l(const long *p)       // FILTER_L
-
-MAP_D(arr, len, fn)                // arr[i] = fn(arr[i])  in place
-MAP_D_INTO(src, dst, len, fn)      // dst[i] = fn(src[i])  src unchanged
-MAP_L / MAP_L_INTO                 // same for long[]
-
-FILTER_D(src, len, dst, &out_len, pred)
-// compact: keep elements where pred(&src[i]) != 0
-// dst may alias src — write cursor <= read cursor always
-
-REDUCE_D(arr, len, init, fn)       // fold: acc=init; acc=fn(acc,arr[i]); return acc
-REDUCE_L(arr, len, init, fn)       // same for long[]
-
-FOR_EACH_D(arr, len, fn)           // fn(arr[i]) for side effects
-FOR_EACH_L(arr, len, fn)
-
-ZIP_D(a, b, out, len, fn)          // out[i] = fn(a[i], b[i])
-ZIP_L(a, b, out, len, fn)
-
-STR_FROM_BUF(buf, len)             // char buffer → tiny_str_t (copies if <=12, borrows if >12)
-STR_FROM_DOUBLE(x)                 // DTOA result → tiny_str_t
-STR_FROM_INT(n)                    // _itoa result → tiny_str_t
+STR_SLICE(s, start, n)
+STR_FIND_BYTE(s, c)
 ```
 
-Example — sum, max, filter positives:
+`STR_SLICE` does not allocate.
+
+It produces a borrowed pointer-style view.
+
+## Printing
 
 ```c
-double add(double a, double b) { return a + b; }
-double dmax(double a, double b) { return a > b ? a : b; }
-int positive(const double *p)  { return *p > 0.0; }
-
-double total   = REDUCE_D(arr, 10, 0.0,    add);
-double biggest = REDUCE_D(arr, 10, arr[0], dmax);
-long   n_pos;
-FILTER_D(arr, 10, out, &n_pos, positive);
+STR_PRINT(s)
+STR_PRINTLN(s)
 ```
 
 ---
 
-### §18 — Namespaces
+# ⚠️ tiny_str_t lifetime rule
 
-Linux namespace isolation via `unshare(2)`.
-
-```c
-UNSHARE(flags)      // returns 0 on success, -errno on fail
-                    // unprivileged process can use CLONE_NEWUSER alone
-
-// flags (combinable with |):
-CLONE_NEWUSER       // new user namespace. Remap uid/gid → fake root inside.
-CLONE_NEWNS         // new mount namespace
-CLONE_NEWPID        // new PID namespace. Fork after to become PID 1 in child.
-CLONE_NEWNET        // new network namespace. Only loopback survives.
-CLONE_NEWUTS        // new UTS namespace. Independent hostname.
-CLONE_NEWIPC        // new IPC namespace. Isolated SysV IPC + POSIX MQ.
-
-WRITE_IDMAP(path, content, len)   // write uid_map/gid_map/setgroups files
-
-GETUID()            // getuid syscall → long
-GETGID()            // getgid syscall → long
-```
-
-Sequence for unprivileged user namespace:
+This is one of the easiest ways to create a dangling pointer:
 
 ```c
-UNSHARE(CLONE_NEWUSER);
-WRITE_IDMAP("/proc/self/setgroups", "deny",    4);
-WRITE_IDMAP("/proc/self/uid_map",   "0 1000 1", 9);   // map uid 1000 → root
-WRITE_IDMAP("/proc/self/gid_map",   "0 1000 1", 9);
-// now getuid() returns 0 inside namespace
+tiny_str_t make_string(void) {
+    char buf[32] = "hello";
+    return S_PTR(buf, 5);
+}
 ```
 
-`BEGIN_ISOLATED` does this automatically with current uid/gid.
+When the function returns:
 
-**`CLONE_NEWPID` note:** calling process keeps original PID.
-Fork after `UNSHARE(CLONE_NEWPID)` — child becomes PID 1 in new namespace.
+```text
+buf dies
+   ↓
+tiny_str_t still contains pointer
+   ↓
+dangling reference
+```
+
+Use a copying constructor such as:
+
+```c
+STR_FROM_BUF(buf, len)
+```
+
+when the backing storage will not outlive the string.
 
 ---
 
-### §19 — Bump Allocator
+# §14 — Math helpers
 
-Simpler than slab. One `SBRK` call. Pointer walks forward. Free = reset everything.
+Constants:
 
 ```c
-BumpAlloc b;
-BUMP_INIT(&b, total_bytes)      // claim total_bytes from brk. Returns -1 on fail.
-                                // total_bytes auto-aligned via ALIGN_UP.
-
-void *p = BUMP_ALLOC(&b, size)  // return aligned ptr, advance cursor. NULL if full.
-                                // size auto-aligned. Different sizes allowed.
-
-BUMP_RESET(&b)                  // cursor = base. Frees everything. O(1).
-BUMP_USED(&b)                   // bytes allocated (long)
-BUMP_LEFT(&b)                   // bytes remaining (long)
+PI
+TAU
+EULER
 ```
 
-Use slab when: all allocations same size, need individual free.
-Use bump when: many different sizes, free everything at once (e.g. per-level game data).
-Use neither when: you need `realloc`. You are on your own then.
+Helpers:
+
+```c
+CLAMP(v, lo, hi)
+LERP(a, b, t)
+
+SIGN_IDX(n)
+
+INT_POW(base, exp)
+GAUSS(n)
+FACTORIAL(n)
+
+IS_LEAP(y)
+SWAP_CHARS(a, b)
+```
+
+Examples:
+
+```c
+double x = LERP(0.0, 100.0, 0.25);
+```
+
+produces:
+
+```text
+25.0
+```
+
+`FACTORIAL` uses `long` and overflows for values above 20 on the intended platform.
+
+That overflow is not checked.
 
 ---
 
-### §20 — Terminal & Game Loop
+# §15 — Interactive input
 
-Raw terminal mode + keyboard polling. No ncurses. Direct `ioctl` + `poll` syscalls.
+These helpers are aimed at simple command-line exercises.
 
 ```c
-TERM_RAW()          // disable canonical mode + echo. Save previous termios.
-                    // Disables: ICANON, ECHO, ECHOE, ECHOK, ISIG, IXON
-                    // Sets VMIN=1 VTIME=0 (block until 1 char)
-                    // Returns 0 on success, -1 on fail.
+LEER_NUMERO("Enter number: ")
+LEER_LETRA("Enter letter: ")
 
-TERM_RESET()        // restore saved termios. Call before EXIT. Always.
-
-TERM_NONBLOCK()     // VMIN=0 VTIME=0: READ returns immediately, 0 if no key.
-                    // Call after TERM_RAW for game loop use.
-
-POLL_KEY(ms)        // 1 = key available within ms milliseconds
-                    // 0 = timeout   -1 = error
-                    // ms=0: instant check   ms=-1: block forever
-
-READ_KEY()          // read one char. Returns int (0-255) or -1 if no data.
-                    // Call TERM_RAW + TERM_NONBLOCK first.
-
-// ANSI terminal control
-CLEAR_SCREEN()              // ESC[2J ESC[H — clear + home cursor
-MOVE_CURSOR(row, col)       // ESC[row;colH — 1-indexed
-CURSOR_HIDE()               // ESC[?25l
-CURSOR_SHOW()               // ESC[?25h
-
-// key constants
-KEY_ESC             27
-KEY_UP              'A'     // read AFTER ESC + '['
-KEY_DOWN            'B'
-KEY_RIGHT           'C'
-KEY_LEFT            'D'
-KEY_ENTER           '\n'
-KEY_SPACE           ' '
-KEY_CTRL(c)         ((c) & 0x1F)    // e.g. KEY_CTRL('c') == 3
-
-CONSUME_ESCAPE()    // read '[' + final byte after ESC. Returns final byte or -1.
+PRINT_LABEL_D("value: ", value)
+PRINT_LABEL_I("count: ", count)
+PRINT_LABEL_S("name: ", name, len)
 ```
 
-Arrow keys are 3-byte sequences: `27 '[' 'A'/'B'/'C'/'D'`.
-When `READ_KEY()` returns `KEY_ESC`, call `CONSUME_ESCAPE()` to get direction.
+`LEER_NUMERO` reads one byte at a time until newline or EOF.
 
-Full game loop pattern:
+Its input buffer is limited to 31 characters.
+
+`LEER_LETRA` consumes the line and returns the first non-space character, converted from lowercase ASCII to uppercase.
+
+These are convenience functions, not robust terminal input libraries.
+
+---
+
+# §16 — Entry points
+
+Normally:
 
 ```c
 BEGIN
+    ...
+END
+```
+
+is enough.
+
+The header generates different entry behavior depending on:
+
+```c
+_TINY_NOSTDLIB
+```
+
+In no-libc mode, the runtime provides `_start` and eventually uses the exit syscall.
+
+There is also:
+
+```c
+BEGIN_ISOLATED
+```
+
+which establishes Linux namespaces before executing the program body.
+
+---
+
+# §17 — Functional toolkit
+
+The functional helpers operate directly on arrays.
+
+The project provides variants for:
+
+```text
+double
+long
+```
+
+and common operations such as:
+
+```c
+MAP_D
+MAP_D_INTO
+
+MAP_L
+MAP_L_INTO
+
+FILTER_D
+FILTER_L
+
+REDUCE_D
+REDUCE_L
+
+FOR_EACH_D
+FOR_EACH_L
+
+ZIP_D
+ZIP_L
+```
+
+Typical function signatures are:
+
+```c
+double fn_d(double x);
+
+long fn_l(long x);
+
+double fn_dd(double acc, double x);
+
+long fn_ll(long acc, long x);
+
+double fn_zip(double a, double b);
+
+int pred_d(const double *p);
+
+int pred_l(const long *p);
+```
+
+Example:
+
+```c
+double add(double a, double b) {
+    return a + b;
+}
+
+double biggest(double a, double b) {
+    return a > b ? a : b;
+}
+
+int positive(const double *p) {
+    return *p > 0.0;
+}
+
+double total = REDUCE_D(arr, 10, 0.0, add);
+
+double maximum = REDUCE_D(arr, 10, arr[0], biggest);
+
+long count;
+
+FILTER_D(arr, 10, out, &count, positive);
+```
+
+The functional layer does not allocate memory.
+
+Function pointers are used to apply transformations or predicates.
+
+---
+
+# §18 — Linux namespaces
+
+The runtime exposes:
+
+```c
+UNSHARE(flags)
+WRITE_IDMAP(path, content, len)
+
+GETUID()
+GETGID()
+```
+
+Supported namespace flags include:
+
+```c
+CLONE_NEWUSER
+CLONE_NEWNS
+CLONE_NEWPID
+CLONE_NEWNET
+CLONE_NEWUTS
+CLONE_NEWIPC
+```
+
+For example:
+
+```c
+UNSHARE(CLONE_NEWUSER);
+```
+
+User namespace setup can then populate:
+
+```text
+/proc/self/setgroups
+/proc/self/uid_map
+/proc/self/gid_map
+```
+
+The provided `BEGIN_ISOLATED` path automates the project's intended isolation setup.
+
+## PID namespace warning
+
+After:
+
+```c
+UNSHARE(CLONE_NEWPID);
+```
+
+the current process does not magically become PID 1.
+
+A child must be created afterward to become PID 1 in the new PID namespace.
+
+---
+
+# §19 — Bump allocator
+
+The bump allocator is the simple alternative to the slab allocator.
+
+```c
+BumpAlloc b;
+
+BUMP_INIT(&b, total_bytes);
+
+void *p = BUMP_ALLOC(&b, size);
+
+BUMP_RESET(&b);
+
+BUMP_USED(&b);
+BUMP_LEFT(&b);
+```
+
+Behavior:
+
+```text
+allocate → move pointer forward
+allocate → move pointer forward
+allocate → move pointer forward
+reset    → move pointer back to beginning
+```
+
+Freeing individual allocations is not supported.
+
+This is useful when the lifetime of many objects is identical.
+
+For example:
+
+```text
+load level
+    ↓
+allocate level data
+allocate entities
+allocate temporary arrays
+allocate strings
+    ↓
+finish level
+    ↓
+BUMP_RESET()
+```
+
+Choose:
+
+```text
+Slab
+    fixed object size
+    individual free needed
+
+Bump
+    varying sizes
+    everything dies together
+```
+
+Neither allocator provides `realloc`.
+
+---
+
+# §20 — Terminal and game loop
+
+The terminal subsystem uses direct `ioctl` and `poll` syscalls.
+
+```c
+TERM_RAW()
+TERM_RESET()
+TERM_NONBLOCK()
+
+POLL_KEY(ms)
+READ_KEY()
+```
+
+ANSI helpers:
+
+```c
+CLEAR_SCREEN()
+
+MOVE_CURSOR(row, col)
+
+CURSOR_HIDE()
+CURSOR_SHOW()
+```
+
+Key constants:
+
+```c
+KEY_ESC
+KEY_UP
+KEY_DOWN
+KEY_LEFT
+KEY_RIGHT
+KEY_ENTER
+KEY_SPACE
+
+KEY_CTRL(c)
+```
+
+Arrow keys arrive as ANSI escape sequences:
+
+```text
+ESC [
+ A   up
+ B   down
+ C   right
+ D   left
+```
+
+After reading `KEY_ESC`, use:
+
+```c
+CONSUME_ESCAPE()
+```
+
+to consume the rest of the sequence.
+
+## Minimal game loop
+
+```c
+BEGIN
+
     TERM_RAW();
     TERM_NONBLOCK();
     CURSOR_HIDE();
 
-    int px = 10, py = 10, running = 1;
+    int px = 10;
+    int py = 10;
+    int running = 1;
 
     while (running) {
+
         CLEAR_SCREEN();
+
         MOVE_CURSOR(py, px);
         PRINT_STR("@", 1);
 
-        if (POLL_KEY(33)) {         // 33ms ≈ 30fps
+        if (POLL_KEY(33)) {
+
             int k = READ_KEY();
-            if (k == 'q')               running = 0;
-            if (k == 'w' || k == KEY_ESC && CONSUME_ESCAPE() == KEY_UP)    py--;
-            if (k == 's')               py++;
-            if (k == 'a')               px--;
-            if (k == 'd')               px++;
+
+            if (k == 'q')
+                running = 0;
+
+            if (k == 'w')
+                py--;
+
+            if (k == 's')
+                py++;
+
+            if (k == 'a')
+                px--;
+
+            if (k == 'd')
+                px++;
+
+            if (k == KEY_ESC) {
+                int direction = CONSUME_ESCAPE();
+
+                if (direction == KEY_UP)
+                    py--;
+
+                if (direction == KEY_DOWN)
+                    py++;
+
+                if (direction == KEY_LEFT)
+                    px--;
+
+                if (direction == KEY_RIGHT)
+                    px++;
+            }
         }
     }
 
     CURSOR_SHOW();
     TERM_RESET();
     CLEAR_SCREEN();
+
 END
 ```
 
-**Always call `TERM_RESET()` before `EXIT`.**
-Terminal stays raw if program crashes without resetting. Shell becomes unusable.
-If this happens: type `reset` blind and press Enter.
+`33 ms` gives approximately a 30 Hz polling interval.
 
 ---
 
-## COMMON MISTAKES
+# ⚠️ Terminal safety
+
+Always restore the terminal:
+
+```c
+TERM_RESET();
+```
+
+before exiting.
+
+If the process leaves the terminal in raw mode, the shell can become unpleasantly broken.
+
+If that happens, type:
+
+```sh
+reset
+```
+
+and press Enter.
+
+This is one of those bugs where the program can technically be finished while the computer still appears haunted.
+
+---
+
+# Common mistakes
 
 | Mistake | Result | Fix |
 |---|---|---|
-| Use `%` operator with `-nostdlib` | segfault (calls `__moddi3`) | use `& 1` or shifts |
-| Use `/` on integers with `-nostdlib` | segfault (calls `__divdi3`) | only powers of 2 via shifts |
-| Wrong length in `PRINT_STR` | garbage output or segfault | count exact or use `STRLEN` |
-| `PUSH_FRAME`/`POP_FRAME` in normal fn | GCC error | naked fns only |
-| `S_PTR` on stack buffer, return `tiny_str_t` | dangling pointer | use `STR_FROM_BUF` (copies if ≤12) |
-| Forget `TERM_RESET()` before crash | shell goes raw | type `reset` + Enter |
-| `-Wl,-N` with custom linker script | misaligned segments, segfault | remove `-Wl,-N`, `tiny.ld` handles it |
-| `CLONE_NEWPID` without fork | process keeps old PID | fork after unshare |
-| `FACTORIAL(n)` with n > 20 | silent overflow | keep n ≤ 20 |
+| Remove `-fno-omit-frame-pointer` | `STACK()` assumptions break | Keep the flag |
+| Remove `-fno-builtin` | GCC emits libc/libgcc helper calls | Keep the flag |
+| Use `%` in no-libc code | May require `__moddi3` | Use explicit low-level operations where appropriate |
+| Use integer `/` in no-libc code | May require `__divdi3` | Avoid unsupported helper generation |
+| Give `PRINT_STR` the wrong length | Garbage or invalid memory access | Use exact length |
+| Use `PUSH_FRAME` in a normal function | GCC/frame corruption | Naked functions only |
+| Return `S_PTR()` into a dead stack buffer | Dangling pointer | Use `STR_FROM_BUF()` |
+| Forget `TERM_RESET()` | Shell remains in raw mode | Run `reset` |
+| Use `-Wl,-N` with `tiny.ld` | Can produce invalid/misaligned segments | Let `tiny.ld` handle layout |
+| Use `CLONE_NEWPID` without forking | Current process keeps its old PID | Fork after unshare |
+| `FACTORIAL(n)` with large `n` | Integer overflow | Keep `n <= 20` |
+| Assume `tiny_str_t` owns its buffer | Use-after-lifetime bugs | Treat heap strings as borrowed views |
 
 ---
 
-## STACK LAYOUT DISCIPLINE
+# Known Issues and Performance Notes
 
- recommend name all stack slots with enum + macros. No magic numbers.
+This section is intentionally separate from the normal API documentation.
+
+These are not theoretical “maybe someday” concerns. They are known design limitations, implementation weaknesses, or areas that require investigation.
+
+## 1. `MOD` uses x87 `fprem1`
 
 ```c
-enum {
-    OFF_A     = 8,
-    OFF_B     = OFF_A + ALIGN_UP(sizeof(double)),
-    OFF_C     = OFF_B + ALIGN_UP(sizeof(double)),
-    OFF_BUF   = OFF_C + ALIGN_UP(sizeof(double)),   // char buf[16] = 2 doubles worth
-    FRAME_SZ  = OFF_BUF + ALIGN_UP(16)
-};
-#define VAR_A   STACK(OFF_A)
-#define VAR_B   STACK(OFF_B)
-#define VAR_C   STACK(OFF_C)
-#define VAR_BUF STACK(OFF_BUF)
+MOD(out, a, b)
 ```
 
-Now code reads like intention, not offsets. Refactor = change enum, macros follow.
+uses an `fprem1` loop.
+
+The operation is valid, but the loop can require multiple iterations depending on the operands.
+
+That means its latency is less predictable than operations such as:
+
+```text
+ADD
+SUB
+MUL
+DIV
+SQRT
+```
+
+Do not use it where tightly bounded execution time matters.
 
 ---
 
-## LICENSE
+## 2. `MEM_COPY` is not a universal high-performance memcpy
 
-AGPLv3. See LICENSE file.
+The implementation uses:
 
- note: AGPLv3 means if you use this in network service, you share source.
- think fair.  not hide knowledge.
+```asm
+rep movsb
+```
+
+This is simple and compact, but large copies may benefit from more specialized implementations depending on the processor and workload.
+
+Possible future optimizations include:
+
+```text
+rep movsq
+SSE2 copies
+AVX copies
+alignment-aware paths
+small-copy fast paths
+```
+
+The important distinction is:
+
+```text
+works
+≠
+optimal for every workload
+```
 
 ---
 
-## BUG REPORTS
+## 3. `STRLEN` has no explicit bound
 
-Bugs probably everywhere. Report useful.
-Fixes not guaranteed. Responses may be blunt. Regressions possible.
+The implementation scans until it finds NUL.
 
-**Bug bounty:** vague appreciation. Maybe acknowledgment.  is poor.
+That means:
 
----
+```c
+STRLEN(ptr);
+```
 
-## CONTRIBUTIONS
+assumes that `ptr` points to a valid NUL-terminated string.
 
-Accepted under strict conditions:
+A malformed pointer or missing terminator can result in a scan far beyond the intended object.
 
-- Follow existing style exactly (ALL_CAPS public API, `_lowercase` internal)
-- No new abstractions unless absolutely necessary
-- Changes minimal and focused
-- Expect rejection even if code correct
+Modern libc implementations may use much more sophisticated vectorized strategies.
 
-Project has strong opinionated direction.  know what  want.
+`tiny.h` deliberately favors directness and small implementation size.
 
 ---
 
-*"Complexity bad. Pointer good. Syscall friend. Linker enemy until understood."*
+## 4. `DTOA` is not round-trip-safe
+
+`DTOA` generates at most 15 fractional digits.
+
+Repeated floating-point operations can introduce rounding effects, and the implementation does not promise that:
+
+```text
+double
+  ↓
+DTOA
+  ↓
+ATOF
+  ↓
+same exact bit pattern
+```
+
+will always hold.
+
+Use it for:
+
+```text
+display
+homework
+simple terminal output
+experiments
+```
+
+not as a general-purpose floating-point serialization format.
+
+---
+
+## 5. `ATOF` and `ATOI` are deliberately incomplete
+
+They do not implement every format accepted by a full standard conversion routine.
+
+Notably:
+
+```text
+hexadecimal
+scientific notation
+NaN
+Inf
+```
+
+are unsupported.
+
+Input scanning is also not externally length-bounded.
+
+---
+
+## 6. `STR_EQ` has an optimization that is not magic
+
+`STR_EQ` can compare:
+
+```text
+length
+    ↓
+four-byte prefix
+    ↓
+full string
+```
+
+The prefix can quickly reject many unequal strings.
+
+But if the first four bytes match, the full string comparison is still required.
+
+The optimization therefore helps primarily with early rejection.
+
+It cannot turn arbitrary long-string equality into O(1).
+
+---
+
+## 7. Inline constants may create unnecessary memory traffic
+
+Some floating-point macros use static constants stored in memory.
+
+For example, operations conceptually equivalent to:
+
+```c
+*x += 1.0;
+```
+
+may involve loading the constant from memory rather than having it represented in some more efficient form.
+
+This is a micro-optimization issue, not a primary correctness problem.
+
+---
+
+## 8. XMM register usage is intentionally explicit
+
+The floating-point API directly manipulates XMM registers.
+
+This keeps the implementation visible and predictable from an educational perspective, but complex macro composition can increase register pressure.
+
+Some operations can also use more registers than strictly necessary.
+
+The project values explicit low-level behavior more highly than abstraction.
+
+---
+
+## 9. Slab initialization updates the free-list head repeatedly
+
+During slab initialization, the free-list pointer is updated for every slot.
+
+The implementation could construct the list locally and assign the final head once.
+
+This matters primarily during initialization and is not currently the dominant cost of the allocator.
+
+---
+
+## 10. `STR_SLICE` always produces pointer/view mode
+
+A short slice of a long string does not get repacked into the inline representation.
+
+So:
+
+```text
+long string
+   ↓
+STR_SLICE(...)
+   ↓
+borrowed view
+```
+
+rather than:
+
+```text
+short result
+   ↓
+12-byte inline string
+```
+
+This keeps slicing allocation-free and simple but sacrifices the compact inline representation in some cases.
+
+---
+
+# ⚠️ Critical correctness issue
+
+The original implementation has a known bug in the sign-mask path used by the floating-point absolute-value/negation machinery.
+
+The problematic pattern moves a 64-bit mask through a 32-bit `movd` operation:
+
+```asm
+movq  (%2), %%rax
+movd  %%rax, %%xmm1
+```
+
+`movd` transfers only 32 bits.
+
+For a mask such as:
+
+```text
+0x7FFFFFFFFFFFFFFF
+```
+
+that is not equivalent to transferring the complete 64-bit value.
+
+The intended instruction is a 64-bit transfer such as:
+
+```asm
+movq %%rax, %%xmm1
+```
+
+This should be treated as a **correctness bug**, not merely a performance issue.
+
+Until verified and fixed in the implementation, code relying on that path should be considered suspect.
+
+---
+
+# Design philosophy
+
+The project makes several deliberate trade-offs.
+
+## Small implementation over completeness
+
+The runtime does not try to reproduce libc.
+
+Instead it implements only the pieces needed by the project's intended experiments.
+
+## Explicit machine-level behavior
+
+Many operations intentionally expose:
+
+```text
+registers
+stack layout
+syscalls
+pointer arithmetic
+instruction selection
+```
+
+rather than hiding them behind generic abstractions.
+
+## No allocation where possible
+
+The string and functional APIs try to operate without dynamic allocation.
+
+The allocators themselves are deliberately simple:
+
+```text
+slab
+bump
+```
+
+rather than trying to become another general-purpose heap manager.
+
+## One source, two runtime modes
+
+The same program can be built:
+
+```text
+with libc
+```
+
+for convenient testing, or:
+
+```text
+without libc
+```
+
+for direct kernel interaction and minimal binaries.
+
+That dual-mode behavior is one of the project's central features.
+
+---
+
+# Recommended workflow
+
+For normal development:
+
+```sh
+# 1. Write program
+vim prog.c
+
+# 2. Compile with libc
+gcc -O2 -fno-omit-frame-pointer -fno-builtin \
+    prog.c -o prog
+
+# 3. Test
+./prog
+
+# 4. Run unit tests
+make test
+
+# 5. Run integration tests
+make test_integration_libc
+
+# 6. Test the real no-libc path
+make test_nostdlib
+
+# 7. Build an intentionally tiny binary
+gcc -O2 \
+    -fno-omit-frame-pointer \
+    -fno-builtin \
+    -nostdlib \
+    -D_TINY_NOSTDLIB \
+    -T tiny.ld \
+    prog.c \
+    -o prog
+
+# 8. Optionally strip
+sstrip prog
+```
+
+A good rule is:
+
+```text
+libc build
+    → development and debugging
+
+unit tests
+    → API correctness
+
+integration tests
+    → Linux/runtime behavior
+
+no-libc build
+    → verify actual tiny-runtime compatibility
+
+sstrip
+    → final size experiment
+```
+
+Do not start debugging an obscure linker problem in the no-libc binary when the same program has not even been tested in libc mode.
+
+That is simply choosing suffering manually.
+
+---
+
+# When to use tiny.h
+
+Use it when you want:
+
+```text
+small binaries
+direct syscalls
+Linux ABI experiments
+assembly-adjacent C
+custom memory management
+terminal programming
+educational exercises
+low-level experimentation
+```
+
+Do not use it when you need:
+
+```text
+portability
+memory safety
+threads
+production-grade allocation
+complete numeric parsing
+precise floating-point serialization
+standard C runtime behavior
+battle-tested string handling
+```
+
+There is nothing wrong with using libc because someone else already spent decades discovering how many ways `strlen()` can go wrong.
+
+---
+
+# License
+
+AGPLv3.
+
+See `LICENSE`.
+
+The project documentation intentionally interprets this as part of the project's “knowledge should remain open” philosophy.
+
+---
+
+# Bug reports
+
+Bugs are expected.
+
+Useful bug reports should include:
+
+```text
+compiler version
+kernel version
+CPU architecture
+build command
+program/source reproducer
+expected behavior
+actual behavior
+```
+
+A report consisting only of:
+
+```text
+doesn't work
+```
+
+is technically a bug report, but mostly an emotional statement.
+
+Fixes are not guaranteed.
+
+Regressions are possible.
+
+---
+
+# Contributions
+
+The project currently prefers focused, minimal changes.
+
+Public API naming convention:
+
+```text
+ALL_CAPS
+```
+
+Internal implementation identifiers:
+
+```text
+_lowercase
+```
+
+Prefer:
+
+```text
+small changes
+existing style
+minimal abstractions
+focused patches
+```
+
+Avoid adding abstractions unless they solve a real problem for the project's intended use.
+
+The project is deliberately opinionated about low-level implementation details.
+
+---
+
+# Final mental model
+
+When coming back to the project after six months and wondering what on Earth was going on, remember:
+
+```text
+tiny.h
+│
+├── stack
+│     STACK(off)
+│
+├── floating point
+│     XMM / x87
+│
+├── heap
+│     brk
+│     ├── slab
+│     └── bump
+│
+├── strings
+│     tiny_str_t
+│     ├── inline ≤ 12 bytes
+│     └── borrowed view
+│
+├── I/O
+│     direct syscalls
+│
+├── terminal
+│     ioctl + poll + ANSI
+│
+├── Linux isolation
+│     namespaces
+│
+├── functional helpers
+│     map / filter / reduce / zip
+│
+└── entry point
+      main()
+        or
+      _start
+```
+
+The project is not trying to make C safer.
+
+It is trying to make the machinery underneath C visible.
+
+That is the point.
