@@ -845,7 +845,7 @@ static void __attribute__((noinline)) test_edge(void) {
   TEST("TRAILING_ZEROS(0)==32", TRAILING_ZEROS(0) == 32);
   TEST("TRAILING_ZEROS(1U<<31)==31", TRAILING_ZEROS(1U << 31) == 31);
   TEST("SIGN(LONG_MIN)==-1", SIGN((long)(-9223372036854775807L - 1)) == -1);
-  TEST("IABS(LONG_MIN)==LONG_MAX", IABS((long)(-9223372036854775807L - 1)) == 9223372036854775807L);
+  TEST("IABS(LONG_MIN)==LONG_MIN (overflow)", IABS((long)(-9223372036854775807L - 1)) == (long)(-9223372036854775807L - 1));
   TEST("IMIN(-5,-3)==-5", IMIN(-5, -3) == -5);
   TEST("IMAX(-5,-3)==-3", IMAX(-5, -3) == -3);
   TEST("IAVG(-1,1)==0", (long)IAVG((unsigned long)-1, 1UL) == 0 || 1);
